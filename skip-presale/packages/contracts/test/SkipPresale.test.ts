@@ -5,6 +5,7 @@ import { time } from "@nomicfoundation/hardhat-network-helpers";
 const USDC = (value: string) => ethers.parseUnits(value, 6);
 const SKIP = (value: string) => ethers.parseUnits(value, 18);
 const PRESALE_ALLOCATION = SKIP("240000000000");
+const FULL_STAGE_RAISE = USDC("3720000");
 const DAY = 24 * 60 * 60;
 
 async function deployFixture(offsetStart = -10, duration = 30 * 24 * 60 * 60) {
@@ -24,8 +25,8 @@ async function deployFixture(offsetStart = -10, duration = 30 * 24 * 60 * 60) {
   ]);
 
   await skip.transfer(await presale.getAddress(), PRESALE_ALLOCATION);
-  await usdc.mint(buyer.address, USDC("3000000"));
-  await usdc.mint(buyer2.address, USDC("3000000"));
+  await usdc.mint(buyer.address, USDC("5000000"));
+  await usdc.mint(buyer2.address, USDC("5000000"));
   await usdc.mint(owner.address, USDC("1000000"));
   await usdc.connect(buyer).approve(await presale.getAddress(), ethers.MaxUint256);
   await usdc.connect(buyer2).approve(await presale.getAddress(), ethers.MaxUint256);
@@ -90,8 +91,15 @@ describe("SkipPresale", function () {
   it("strictly enforces the hardcap", async function () {
     const { buyer, buyer2, presale } = await deployFixture();
 
-    await presale.connect(buyer).buy(USDC("2000000"));
+    await presale.connect(buyer).buy(FULL_STAGE_RAISE);
     await expect(presale.connect(buyer2).buy(1)).to.be.revertedWithCustomError(presale, "HardCapExceeded");
+  });
+
+  it("keeps total stage raise equal to the hardcap", async function () {
+    const { presale } = await deployFixture();
+
+    expect(await presale.totalStageRaise()).to.equal(await presale.HARD_CAP());
+    expect(await presale.totalStageRaise()).to.equal(FULL_STAGE_RAISE);
   });
 
   it("pause blocks buying and unpause restores buying", async function () {
@@ -107,7 +115,7 @@ describe("SkipPresale", function () {
     const { owner, buyer, presale } = await deployFixture();
 
     await expect(presale.connect(owner).finalize()).to.be.revertedWithCustomError(presale, "PresaleStillActive");
-    await presale.connect(buyer).buy(USDC("2000000"));
+    await presale.connect(buyer).buy(FULL_STAGE_RAISE);
     await expect(presale.connect(owner).finalize()).to.emit(presale, "Finalized").withArgs(true, false);
   });
 
@@ -202,14 +210,16 @@ describe("SkipPresale", function () {
     await expect(presale.connect(buyer).refund()).to.emit(presale, "Refunded");
   });
 
-  it("reports allStagesSoldOut false while the last stage is not fully sold", async function () {
+  it("reaches allStagesSoldOut and finalizes before end without contradicting the hardcap", async function () {
     const { owner, buyer, presale } = await deployFixture();
 
-    await presale.connect(buyer).buy(USDC("1999999"));
+    await presale.connect(buyer).buy(FULL_STAGE_RAISE - 38n);
     expect(await presale.allStagesSoldOut()).to.equal(false);
-    await presale.connect(buyer).buy(USDC("1"));
-    expect(await presale.allStagesSoldOut()).to.equal(false);
+    await presale.connect(buyer).buy(38);
+    expect(await presale.allStagesSoldOut()).to.equal(true);
+    expect((await presale.getPresaleInfo()).totalRaised).to.equal(await presale.HARD_CAP());
     await expect(presale.connect(owner).finalize()).to.emit(presale, "Finalized").withArgs(true, false);
+    await expect(presale.connect(buyer).buy(1)).to.be.revertedWithCustomError(presale, "HardCapExceeded");
   });
 
   it("vests buyer claims: 50 percent immediately, 75 percent after 45 days, 100 percent after 90 days", async function () {

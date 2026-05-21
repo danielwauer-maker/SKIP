@@ -13,6 +13,7 @@ Distribution:
 - Reserve: 3%
 
 Presale allocation used by the current contract: 240,000,000,000 SKIP across 12 stages of 20,000,000,000 SKIP each.
+The exact sum of all 12 stage raises is 3,720,000 USDC, and the presale hardcap is set to the same value.
 Keep the remaining presale allocation strategy documented before mainnet deployment.
 
 ## Vesting

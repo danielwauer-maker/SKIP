@@ -25,4 +25,4 @@ export const presaleStages = [
 
 export const stageTokenCap = 20_000_000_000;
 export const totalSupply = 1_000_000_000_000;
-export const hardCapUsdc = Number(process.env.NEXT_PUBLIC_HARDCAP_USDC || 2_000_000);
+export const hardCapUsdc = Number(process.env.NEXT_PUBLIC_HARDCAP_USDC || 3_720_000);

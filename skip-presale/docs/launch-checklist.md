@@ -5,6 +5,7 @@
 - Run frontend against testnet contracts with real wallet flows.
 - Confirm USDC address and decimals for target chain.
 - Confirm presale start and end timestamps.
+- Confirm hardcap is 3,720,000 USDC and equals the exact sum of all stage raises.
 - Transfer exact presale allocation to the presale contract.
 - Deploy `SkipTeamVesting` with the correct beneficiary and start timestamp.
 - Transfer the intended team allocation to the vesting contract.

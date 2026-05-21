@@ -20,6 +20,7 @@ This future utility is planned only and is not guaranteed.
 ## Presale
 
 The presale accepts USDC with 6 decimals and sells SKIP with 18 decimals across 12 stages.
+The hardcap is 3,720,000 USDC, matching the exact sum of all 12 stage raises.
 Claims are only enabled after successful finalize and softcap achievement. Buyer claims vest as 50% immediately after successful finalize and 50% linearly over 90 days.
 If the softcap is not reached, refunds can be activated once the contract holds enough USDC to refund every contribution.
 

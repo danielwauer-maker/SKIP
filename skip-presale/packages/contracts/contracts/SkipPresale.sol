@@ -45,7 +45,7 @@ contract SkipPresale is Ownable, Pausable, ReentrancyGuard {
     uint256 public immutable startTime;
     uint256 public immutable endTime;
     uint256 public constant SOFT_CAP = 250_000 * 1e6;
-    uint256 public constant HARD_CAP = 2_000_000 * 1e6;
+    uint256 public constant HARD_CAP = 3_720_000 * 1e6;
     uint256 public constant STAGE_TOKEN_CAP = 20_000_000_000 * 1e18;
     uint256 public constant DEVELOPMENT_BPS = 2_500;
     uint256 public constant BPS_DENOMINATOR = 10_000;
@@ -298,6 +298,12 @@ contract SkipPresale is Ownable, Pausable, ReentrancyGuard {
             if (stages[i].sold >= stages[i].tokenCap) {
                 raised += (stages[i].tokenCap * stages[i].priceUsdc) / 1e18;
             }
+        }
+    }
+
+    function totalStageRaise() public view returns (uint256 raised) {
+        for (uint256 i = 0; i < stages.length; i++) {
+            raised += (stages[i].tokenCap * stages[i].priceUsdc) / 1e18;
         }
     }
 

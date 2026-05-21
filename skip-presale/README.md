@@ -31,6 +31,7 @@ For the web app, set deployed contract addresses and `NEXT_PUBLIC_WALLETCONNECT_
 
 ## Presale Mechanics
 
+- Hardcap: 3,720,000 USDC, equal to the exact sum of all 12 stage raises.
 - Development treasury withdrawals are stage-based: only 25% of USDC attributed to fully completed stages can be withdrawn during the presale.
 - Partially sold stages do not unlock development funds.
 - Buyer vesting releases 50% of purchased SKIP after successful finalize and the remaining 50% linearly over 90 days.
@@ -123,6 +124,7 @@ Open `http://localhost:3000`.
 - Complete independent smart contract review.
 - Complete legal review of sale terms, copy and user eligibility.
 - Confirm stage-based development treasury numbers against finalized stage pricing.
+- Confirm hardcap remains equal to the exact 12-stage raise of 3,720,000 USDC.
 - Confirm buyer vesting UX and claim schedule on testnet.
 - Confirm team vesting beneficiary, start timestamp and deposited team allocation.
 - Verify token, presale and USDC addresses.

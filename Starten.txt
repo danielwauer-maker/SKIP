@@ -1,0 +1,140 @@
+SKIP PRESALE – LOKALER START (POWERSHELL)
+
+==================================================
+1. HARDHAT LOCAL BLOCKCHAIN STARTEN
+==================================================
+
+TERMINAL 1:
+
+cd C:\Users\Tardis-Admin\Documents\SKIP\skip-presale\packages\contracts
+
+corepack pnpm exec hardhat node
+
+WICHTIG:
+Dieses Terminal geöffnet lassen.
+
+
+==================================================
+2. CONTRACTS LOKAL DEPLOYEN
+==================================================
+
+NEUES TERMINAL 2:
+
+cd C:\Users\Tardis-Admin\Documents\SKIP\skip-presale
+
+corepack pnpm --filter @skip/contracts deploy:local
+
+Danach:
+
+corepack pnpm --filter @skip/contracts export:abi
+
+
+==================================================
+3. .env.local ERSTELLEN
+==================================================
+
+Falls noch nicht vorhanden:
+
+copy apps\web\.env.example apps\web\.env.local
+
+Danach:
+Datei öffnen:
+
+apps\web\.env.local
+
+Und die Contract-Adressen aus deploy:local eintragen.
+
+Beispiel:
+
+NEXT_PUBLIC_CHAIN_ID=31337
+NEXT_PUBLIC_SKIP_TOKEN_ADDRESS=0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
+NEXT_PUBLIC_SKIP_PRESALE_ADDRESS=0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+NEXT_PUBLIC_USDC_ADDRESS=0x5FbDB2315678afecb367f032d93F642f64180aa3
+NEXT_PUBLIC_SKIP_TEAM_VESTING_ADDRESS=0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
+
+Datei speichern.
+
+
+==================================================
+4. WEBSITE STARTEN
+==================================================
+
+IM TERMINAL 2:
+
+corepack pnpm --filter @skip/web dev
+
+
+==================================================
+5. WEBSITE ÖFFNEN
+==================================================
+
+Im Browser öffnen:
+
+http://localhost:3000
+
+
+==================================================
+6. OPTIONAL – METAMASK MIT LOKALEM NETZWERK VERBINDEN
+==================================================
+
+MetaMask → Netzwerk hinzufügen
+
+Network Name:
+Hardhat Local
+
+RPC URL:
+http://127.0.0.1:8545
+
+Chain ID:
+31337
+
+Currency Symbol:
+ETH
+
+
+==================================================
+7. TESTWALLET IMPORTIEREN
+==================================================
+
+Im Terminal mit "hardhat node" werden Testaccounts angezeigt.
+
+Beispiel:
+
+Private Key: 0x.....
+
+Diesen Private Key in MetaMask importieren:
+
+MetaMask
+→ Konto importieren
+→ Private Key einfügen
+
+
+==================================================
+8. TESTEN
+==================================================
+
+Danach kannst du komplett kostenlos testen:
+
+- Wallet verbinden
+- MockUSDC verwenden
+- SKIP kaufen
+- Dashboard testen
+- Claim testen
+- Refund testen
+- Vesting testen
+- Stages testen
+
+
+==================================================
+WICHTIG
+==================================================
+
+Wenn der Hardhat Node neu gestartet wird,
+gehen die lokalen Deployments verloren.
+
+Dann musst du erneut ausführen:
+
+corepack pnpm --filter @skip/contracts deploy:local
+
+und die neuen Contract-Adressen wieder
+in apps\web\.env.local eintragen.
