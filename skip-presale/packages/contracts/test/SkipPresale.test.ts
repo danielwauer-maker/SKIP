@@ -5,6 +5,7 @@ import { time } from "@nomicfoundation/hardhat-network-helpers";
 const USDC = (value: string) => ethers.parseUnits(value, 6);
 const SKIP = (value: string) => ethers.parseUnits(value, 18);
 const PRESALE_ALLOCATION = SKIP("240000000000");
+const DAY = 24 * 60 * 60;
 
 async function deployFixture(offsetStart = -10, duration = 30 * 24 * 60 * 60) {
   const [owner, buyer, buyer2, treasury] = await ethers.getSigners();
@@ -119,8 +120,11 @@ describe("SkipPresale", function () {
     await time.increaseTo(end + 1);
     await presale.connect(owner).finalize();
     const purchasedAmount = (await presale.getUserInfo(buyer.address)).purchased;
+    const amountToClaim = await presale.claimable(buyer.address);
     await expect(presale.connect(buyer).claim()).to.emit(presale, "Claimed");
-    expect(await skip.balanceOf(buyer.address)).to.equal(purchasedAmount);
+    expect(amountToClaim).to.equal(purchasedAmount / 2n);
+    expect(await skip.balanceOf(buyer.address)).to.be.gte(purchasedAmount / 2n);
+    expect(await skip.balanceOf(buyer.address)).to.be.lte(purchasedAmount);
   });
 
   it("enables refund after an unsuccessful finalize when refund liquidity is intact", async function () {
@@ -139,35 +143,111 @@ describe("SkipPresale", function () {
   it("limits development withdrawals to 25 percent and tracks accounting", async function () {
     const { owner, buyer, treasury, usdc, presale } = await deployFixture();
 
-    await presale.connect(buyer).buy(USDC("100000"));
+    await presale.connect(buyer).buy(USDC("100"));
+    expect(await presale.completedStageRaised()).to.equal(0);
+    expect(await presale.maxDevelopmentWithdrawable()).to.equal(0);
+    await expect(presale.connect(owner).withdrawDevelopmentFunds(treasury.address)).to.be.revertedWithCustomError(
+      presale,
+      "InvalidAmount"
+    );
+
+    await presale.connect(buyer).buy(USDC("79900"));
+    expect(await presale.completedStageRaised()).to.equal(USDC("80000"));
+    expect(await presale.maxDevelopmentWithdrawable()).to.equal(USDC("20000"));
     await expect(presale.connect(owner).withdrawDevelopmentFunds(treasury.address))
       .to.emit(presale, "DevelopmentFundsWithdrawn")
-      .withArgs(treasury.address, USDC("25000"));
+      .withArgs(treasury.address, USDC("20000"));
 
-    expect(await presale.developmentWithdrawn()).to.equal(USDC("25000"));
-    expect(await usdc.balanceOf(treasury.address)).to.equal(USDC("25000"));
+    expect(await presale.developmentWithdrawn()).to.equal(USDC("20000"));
+    expect(await usdc.balanceOf(treasury.address)).to.equal(USDC("20000"));
     await expect(presale.connect(owner).withdrawDevelopmentFunds(treasury.address)).to.be.revertedWithCustomError(
       presale,
       "InvalidAmount"
     );
   });
 
+  it("unlocks only the additional 25 percent when stage 2 completes", async function () {
+    const { owner, buyer, treasury, presale } = await deployFixture();
+
+    await presale.connect(buyer).buy(USDC("80000"));
+    await presale.connect(owner).withdrawDevelopmentFunds(treasury.address);
+    expect(await presale.maxDevelopmentWithdrawable()).to.equal(0);
+
+    await presale.connect(buyer).buy(USDC("100000"));
+    expect(await presale.completedStageRaised()).to.equal(USDC("180000"));
+    expect(await presale.maxDevelopmentWithdrawable()).to.equal(USDC("25000"));
+    await expect(presale.connect(owner).withdrawDevelopmentFunds(treasury.address))
+      .to.emit(presale, "DevelopmentFundsWithdrawn")
+      .withArgs(treasury.address, USDC("25000"));
+    expect(await presale.developmentWithdrawn()).to.equal(USDC("45000"));
+  });
+
   it("requires repayment before activating refunds when development funds are missing", async function () {
     const { owner, buyer, treasury, usdc, presale, end } = await deployFixture();
 
-    await presale.connect(buyer).buy(USDC("100000"));
+    await presale.connect(buyer).buy(USDC("80000"));
     await presale.connect(owner).withdrawDevelopmentFunds(treasury.address);
     await time.increaseTo(end + 1);
     await expect(presale.connect(owner).finalize()).to.emit(presale, "Finalized").withArgs(false, false);
     expect((await presale.getPresaleInfo()).refundEnabled).to.equal(false);
 
-    await usdc.connect(treasury).approve(await presale.getAddress(), USDC("25000"));
-    await expect(presale.connect(treasury).repayDevelopmentFunds(USDC("25000")))
+    await expect(presale.connect(buyer).refund()).to.be.revertedWithCustomError(presale, "RefundNotEnabled");
+
+    await usdc.connect(treasury).approve(await presale.getAddress(), USDC("20000"));
+    await expect(presale.connect(treasury).repayDevelopmentFunds(USDC("20000")))
       .to.emit(presale, "DevelopmentFundsRepaid")
-      .withArgs(treasury.address, USDC("25000"));
+      .withArgs(treasury.address, USDC("20000"));
 
     expect((await presale.getPresaleInfo()).refundEnabled).to.equal(true);
     await expect(presale.connect(buyer).refund()).to.emit(presale, "Refunded");
+  });
+
+  it("reports allStagesSoldOut false while the last stage is not fully sold", async function () {
+    const { owner, buyer, presale } = await deployFixture();
+
+    await presale.connect(buyer).buy(USDC("1999999"));
+    expect(await presale.allStagesSoldOut()).to.equal(false);
+    await presale.connect(buyer).buy(USDC("1"));
+    expect(await presale.allStagesSoldOut()).to.equal(false);
+    await expect(presale.connect(owner).finalize()).to.emit(presale, "Finalized").withArgs(true, false);
+  });
+
+  it("vests buyer claims: 50 percent immediately, 75 percent after 45 days, 100 percent after 90 days", async function () {
+    const { owner, buyer, skip, presale, end } = await deployFixture();
+
+    await presale.connect(buyer).buy(USDC("250000"));
+    const purchasedAmount = (await presale.getUserInfo(buyer.address)).purchased;
+    await time.increaseTo(end + 1);
+    await presale.connect(owner).finalize();
+    const vestingStart = await presale.vestingStart();
+
+    expect(await presale.claimable(buyer.address)).to.equal(purchasedAmount / 2n);
+    await expect(presale.connect(buyer).claim()).to.emit(presale, "Claimed");
+    expect(await presale.claimedAmount(buyer.address)).to.be.closeTo(purchasedAmount / 2n, SKIP("100000"));
+
+    await time.increaseTo(vestingStart + BigInt(45 * DAY));
+    const expectedAt45 = (purchasedAmount * 75n) / 100n;
+    expect(await presale.claimable(buyer.address)).to.be.closeTo(expectedAt45 - (await presale.claimedAmount(buyer.address)), SKIP("100000"));
+    await presale.connect(buyer).claim();
+    expect(await presale.claimedAmount(buyer.address)).to.be.closeTo(expectedAt45, SKIP("100000"));
+
+    await time.increaseTo(vestingStart + BigInt(90 * DAY));
+    expect(await presale.claimable(buyer.address)).to.equal(purchasedAmount - (await presale.claimedAmount(buyer.address)));
+    await presale.connect(buyer).claim();
+    expect(await presale.claimedAmount(buyer.address)).to.equal(purchasedAmount);
+    expect(await skip.balanceOf(buyer.address)).to.equal(purchasedAmount);
+    await expect(presale.connect(buyer).claim()).to.be.revertedWithCustomError(presale, "NothingToClaim");
+  });
+
+  it("claim is blocked before finalize and during refund mode", async function () {
+    const { owner, buyer, presale, end } = await deployFixture();
+
+    await presale.connect(buyer).buy(USDC("1000"));
+    await expect(presale.connect(buyer).claim()).to.be.revertedWithCustomError(presale, "ClaimNotEnabled");
+    await time.increaseTo(end + 1);
+    await presale.connect(owner).finalize();
+    expect((await presale.getPresaleInfo()).refundEnabled).to.equal(true);
+    await expect(presale.connect(buyer).claim()).to.be.revertedWithCustomError(presale, "ClaimNotEnabled");
   });
 
   it("allows remaining funds withdrawal only after successful finalize", async function () {

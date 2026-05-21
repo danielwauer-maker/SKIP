@@ -7,3 +7,5 @@ $SKIP is not presented as an investment product.
 
 Smart contracts can contain vulnerabilities. Blockchains, RPC providers, wallets, infrastructure and frontends can fail.
 Get independent legal, tax and financial review before participating.
+
+Presale buyer vesting, team vesting and stage-based treasury rules reduce some operational risks but do not remove market, smart-contract, legal, liquidity or execution risk.

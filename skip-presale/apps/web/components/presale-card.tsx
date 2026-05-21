@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import { useAccount, useChainId, useReadContract, useReadContracts, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
-import { formatUnits } from "viem";
 import { abis, contracts, hasConfiguredContracts } from "../config/contracts";
 import { targetChain, targetChainId } from "../config/chains";
 import { presaleStages } from "../config/presale";
@@ -24,6 +23,7 @@ type PresaleInfoTuple = readonly [
   boolean,
   boolean,
   boolean,
+  bigint,
   bigint,
   bigint
 ];
@@ -215,8 +215,11 @@ export function PresaleCard() {
             </div>
             <Countdown endTime={info?.[6]} />
             <p className="rounded-md border border-line bg-black/30 p-4 text-sm leading-6 text-slate-300">
-              Up to 25% of raised funds may be used during the presale for development, infrastructure, legal review
-              and community growth. Remaining funds stay locked until successful completion.
+              Buyer claim: 50% after successful presale finalization, remaining 50% linearly over 90 days.
+            </p>
+            <p className="rounded-md border border-line bg-black/30 p-4 text-sm leading-6 text-slate-300">
+              25% of funds from fully completed stages may be used during the presale for development, infrastructure,
+              legal review and community growth. Remaining funds stay locked until successful completion.
             </p>
           </div>
         </div>

@@ -29,6 +29,14 @@ cp apps/web/.env.example apps/web/.env.local
 Set `PRIVATE_KEY`, `POLYGON_AMOY_RPC_URL`, `POLYGONSCAN_API_KEY`, and optionally `USDC_ADDRESS`.
 For the web app, set deployed contract addresses and `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`.
 
+## Presale Mechanics
+
+- Development treasury withdrawals are stage-based: only 25% of USDC attributed to fully completed stages can be withdrawn during the presale.
+- Partially sold stages do not unlock development funds.
+- Buyer vesting releases 50% of purchased SKIP after successful finalize and the remaining 50% linearly over 90 days.
+- Team vesting uses `SkipTeamVesting.sol` with a 12 month cliff and 24 months of linear vesting.
+- Staking is not part of Phase 1.
+
 ## Contracts Compile
 
 ```bash
@@ -58,6 +66,7 @@ pnpm --filter @skip/contracts deploy:local
 ```
 
 Copy the output addresses into `apps/web/.env.local`.
+Set `TEAM_VESTING_AMOUNT` before deployment if the script should transfer team tokens into `SkipTeamVesting`.
 
 ## Amoy Deployment
 
@@ -113,6 +122,9 @@ Open `http://localhost:3000`.
 
 - Complete independent smart contract review.
 - Complete legal review of sale terms, copy and user eligibility.
+- Confirm stage-based development treasury numbers against finalized stage pricing.
+- Confirm buyer vesting UX and claim schedule on testnet.
+- Confirm team vesting beneficiary, start timestamp and deposited team allocation.
 - Verify token, presale and USDC addresses.
 - Verify contract source on Polygonscan.
 - Confirm token allocation wallet controls and multisig ownership.
@@ -129,10 +141,16 @@ Open `http://localhost:3000`.
 - Pausable emergency control exists for purchases.
 - Hardcap enforced before accepting USDC.
 - Softcap refund path requires enough USDC in contract.
-- Development treasury is capped at 25% of raised funds.
+- Development treasury is capped at 25% of funds from fully completed stages.
 - Development funds can be repaid before refund activation.
 - Owner cannot edit user contributions or purchased balances.
 - Unsold token withdrawal preserves unclaimed balances after successful finalize.
+- Buyer vesting prevents 100% immediate presale claim.
+- Team vesting uses deposited tokens only and does not mint.
+
+## Phase 2 Staking
+
+Staking is intentionally not part of Phase 1. A future `SkipStaking.sol` should be built as a separate module, not inside the presale contract, with an explicit reward source, clear accounting, `nonReentrant` protections and no reward guarantees in public copy.
 
 ## Legal Review Checklist
 

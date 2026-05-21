@@ -4,7 +4,21 @@ import { useReadContract } from "wagmi";
 import { abis, contracts, hasConfiguredContracts } from "../config/contracts";
 import { formatSkip, formatUsdc } from "../lib/format";
 
-type PresaleInfoTuple = readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint, boolean, boolean, boolean, bigint, bigint];
+type PresaleInfoTuple = readonly [
+  bigint,
+  bigint,
+  bigint,
+  bigint,
+  bigint,
+  bigint,
+  bigint,
+  boolean,
+  boolean,
+  boolean,
+  bigint,
+  bigint,
+  bigint
+];
 
 export function TransparencySection() {
   const { data } = useReadContract({
@@ -29,9 +43,10 @@ export function TransparencySection() {
       </p>
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Metric label="totalRaised" value={`${formatUsdc(info?.[0])} USDC`} />
+        <Metric label="completedStageRaised" value={`${formatUsdc(info?.[12])} USDC`} />
         <Metric label="developmentWithdrawn" value={`${formatUsdc(info?.[10])} USDC`} />
         <Metric label="lockedFunds" value={`${formatUsdc(lockedFunds)} USDC`} />
-        <Metric label="treasuryAllocation" value="25% max development unlock" />
+        <Metric label="treasuryAllocation" value="25% of completed stages only" />
         <Metric label="currentStage" value={`${Number(info?.[4] ?? BigInt(0)) + 1} / 12`} />
         <Metric label="totalSold" value={`${formatSkip(info?.[1])} SKIP`} />
         <Metric label="remainingTokens" value={`${formatSkip(remainingTokens)} SKIP`} />

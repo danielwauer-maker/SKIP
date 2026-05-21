@@ -14,8 +14,8 @@ export default function WhitepaperPage() {
           indicators. This is planned utility and may never be delivered.
         </p>
         <p>
-          The presale contract uses fixed caps, staged pricing, claim after successful finalize, refund logic when the
-          softcap is not reached, and transparent development treasury rules.
+          The presale contract uses fixed caps, staged pricing, buyer vesting, refund logic when the softcap is not
+          reached, and stage-based development treasury rules.
         </p>
         <Link className="inline-flex rounded-md bg-neon px-5 py-3 font-semibold text-ink" href="/presale">
           Open Presale

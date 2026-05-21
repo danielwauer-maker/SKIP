@@ -8,7 +8,21 @@ import { compactAddress, formatSkip, formatUsdc } from "../lib/format";
 import { WalletConnectButton } from "./wallet-connect-button";
 
 type UserInfoTuple = readonly [bigint, bigint, bigint, bigint, boolean];
-type PresaleInfoTuple = readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint, boolean, boolean, boolean, bigint, bigint];
+type PresaleInfoTuple = readonly [
+  bigint,
+  bigint,
+  bigint,
+  bigint,
+  bigint,
+  bigint,
+  bigint,
+  boolean,
+  boolean,
+  boolean,
+  bigint,
+  bigint,
+  bigint
+];
 
 export function UserDashboard() {
   const { address, isConnected } = useAccount();
@@ -32,6 +46,14 @@ export function UserDashboard() {
     query: { enabled: configured, refetchInterval: 12_000 }
   });
 
+  const { data: claimedAmount } = useReadContract({
+    address: contracts.skipPresale,
+    abi: abis.skipPresale,
+    functionName: "claimedAmount",
+    args: [address],
+    query: { enabled: configured && Boolean(address), refetchInterval: 12_000 }
+  });
+
   useWatchContractEvent({
     address: contracts.skipPresale,
     abi: abis.skipPresale,
@@ -44,6 +66,11 @@ export function UserDashboard() {
 
   const user = userInfo as UserInfoTuple | undefined;
   const info = presaleInfo as PresaleInfoTuple | undefined;
+  const claimed = claimedAmount as bigint | undefined;
+  const vestingProgress =
+    user?.[1] && user[1] > BigInt(0)
+      ? Math.min(100, Number(((claimed ?? BigInt(0)) * BigInt(10000)) / user[1]) / 100)
+      : 0;
   const status = useMemo(() => {
     if (!info) return "Loading";
     if (info[8]) return "Claim enabled";
@@ -77,11 +104,22 @@ export function UserDashboard() {
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Metric label="Wallet" value={compactAddress(address)} />
           <Metric label="USDC contributed" value={`${formatUsdc(user?.[0])} USDC`} />
-          <Metric label="SKIP purchased" value={`${formatSkip(user?.[1])} SKIP`} />
-          <Metric label="Claimable SKIP" value={`${formatSkip(user?.[2])} SKIP`} />
+          <Metric label="Purchased SKIP total" value={`${formatSkip(user?.[1])} SKIP`} />
+          <Metric label="Claimed SKIP" value={`${formatSkip(claimed)} SKIP`} />
+          <Metric label="Currently claimable SKIP" value={`${formatSkip(user?.[2])} SKIP`} />
           <Metric label="Refundable USDC" value={`${formatUsdc(user?.[3])} USDC`} />
           <Metric label="Presale status" value={status} />
+          <Metric label="Vesting progress" value={`${vestingProgress.toFixed(1)}% claimed`} />
+          <Metric
+            label="Next claim"
+            value={user?.[2] && user[2] > BigInt(0) ? "Available now" : "Unlocks linearly after finalize"}
+          />
         </div>
+
+        <p className="mt-5 rounded-md border border-line bg-black/30 p-4 text-sm leading-6 text-slate-300">
+          Buyer vesting: 50% is claimable after successful presale finalization. The remaining 50% unlocks linearly over
+          90 days from finalize. Multiple claims are supported.
+        </p>
 
         {hash ? <p className="mt-5 break-all text-sm text-neon">Transaction: {hash}</p> : null}
         {isSuccess ? <p className="mt-2 text-sm text-neon">Transaction confirmed.</p> : null}

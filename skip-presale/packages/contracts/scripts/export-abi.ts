@@ -2,7 +2,7 @@ import { artifacts } from "hardhat";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-const contracts = ["SkipToken", "SkipPresale", "MockUSDC"];
+const contracts = ["SkipToken", "SkipPresale", "SkipTeamVesting", "MockUSDC"];
 
 export async function exportAbis() {
   const outputDir = path.resolve("../../apps/web/abi");

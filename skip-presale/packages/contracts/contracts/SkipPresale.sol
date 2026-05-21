@@ -37,6 +37,7 @@ contract SkipPresale is Ownable, Pausable, ReentrancyGuard {
         bool refundEnabled;
         uint256 developmentWithdrawn;
         uint256 maxDevelopmentWithdrawable;
+        uint256 completedStageRaised;
     }
 
     IERC20 public immutable skipToken;
@@ -48,17 +49,20 @@ contract SkipPresale is Ownable, Pausable, ReentrancyGuard {
     uint256 public constant STAGE_TOKEN_CAP = 20_000_000_000 * 1e18;
     uint256 public constant DEVELOPMENT_BPS = 2_500;
     uint256 public constant BPS_DENOMINATOR = 10_000;
+    uint256 public constant IMMEDIATE_CLAIM_BPS = 5_000;
+    uint256 public constant BUYER_VESTING_DURATION = 90 days;
 
     Stage[] private stages;
     mapping(address => uint256) public contributed;
     mapping(address => uint256) public purchased;
-    mapping(address => bool) public hasClaimed;
+    mapping(address => uint256) public claimed;
     mapping(address => bool) public hasRefunded;
 
     uint256 public totalRaised;
     uint256 public totalSold;
     uint256 public totalClaimed;
     uint256 public developmentWithdrawn;
+    uint256 public vestingStart;
     bool public finalized;
     bool public claimEnabled;
     bool public refundEnabled;
@@ -140,11 +144,10 @@ contract SkipPresale is Ownable, Pausable, ReentrancyGuard {
 
     function claim() external nonReentrant {
         if (!claimEnabled) revert ClaimNotEnabled();
-        if (hasClaimed[msg.sender]) revert AlreadyClaimed();
-        uint256 amount = purchased[msg.sender];
+        uint256 amount = claimable(msg.sender);
         if (amount == 0) revert NothingToClaim();
 
-        hasClaimed[msg.sender] = true;
+        claimed[msg.sender] += amount;
         totalClaimed += amount;
         skipToken.safeTransfer(msg.sender, amount);
         emit Claimed(msg.sender, amount);
@@ -165,11 +168,12 @@ contract SkipPresale is Ownable, Pausable, ReentrancyGuard {
 
     function finalize() external onlyOwner {
         if (finalized) revert NotFinalized();
-        if (block.timestamp <= endTime && totalRaised < HARD_CAP) revert PresaleStillActive();
+        if (block.timestamp <= endTime && totalRaised < HARD_CAP && !allStagesSoldOut()) revert PresaleStillActive();
 
         finalized = true;
         if (totalRaised >= SOFT_CAP) {
             claimEnabled = true;
+            vestingStart = block.timestamp;
             emit Finalized(true, false);
             return;
         }
@@ -241,6 +245,15 @@ contract SkipPresale is Ownable, Pausable, ReentrancyGuard {
         return stages.length - 1;
     }
 
+    function allStagesSoldOut() public view returns (bool) {
+        for (uint256 i = 0; i < stages.length; i++) {
+            if (stages[i].sold < stages[i].tokenCap) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     function getStagesCount() external view returns (uint256) {
         return stages.length;
     }
@@ -256,9 +269,9 @@ contract SkipPresale is Ownable, Pausable, ReentrancyGuard {
         return UserInfo({
             contributed: userContributed,
             purchased: userPurchased,
-            claimable: claimEnabled && !hasClaimed[user] ? userPurchased : 0,
+            claimable: claimable(user),
             refundable: refundEnabled && !hasRefunded[user] ? userContributed : 0,
-            hasClaimed: hasClaimed[user]
+            hasClaimed: userPurchased > 0 && claimed[user] >= userPurchased
         });
     }
 
@@ -275,12 +288,21 @@ contract SkipPresale is Ownable, Pausable, ReentrancyGuard {
             claimEnabled: claimEnabled,
             refundEnabled: refundEnabled,
             developmentWithdrawn: developmentWithdrawn,
-            maxDevelopmentWithdrawable: maxDevelopmentWithdrawable()
+            maxDevelopmentWithdrawable: maxDevelopmentWithdrawable(),
+            completedStageRaised: completedStageRaised()
         });
     }
 
+    function completedStageRaised() public view returns (uint256 raised) {
+        for (uint256 i = 0; i < stages.length; i++) {
+            if (stages[i].sold >= stages[i].tokenCap) {
+                raised += (stages[i].tokenCap * stages[i].priceUsdc) / 1e18;
+            }
+        }
+    }
+
     function maxDevelopmentWithdrawable() public view returns (uint256) {
-        uint256 allowance = (totalRaised * DEVELOPMENT_BPS) / BPS_DENOMINATOR;
+        uint256 allowance = (completedStageRaised() * DEVELOPMENT_BPS) / BPS_DENOMINATOR;
         if (allowance <= developmentWithdrawn) {
             return 0;
         }
@@ -291,6 +313,30 @@ contract SkipPresale is Ownable, Pausable, ReentrancyGuard {
 
     function previewTokens(uint256 usdcAmount) external view returns (uint256) {
         return _previewTokens(usdcAmount);
+    }
+
+    function claimable(address user) public view returns (uint256) {
+        if (!claimEnabled || purchased[user] == 0) {
+            return 0;
+        }
+
+        uint256 totalPurchased = purchased[user];
+        uint256 immediate = (totalPurchased * IMMEDIATE_CLAIM_BPS) / BPS_DENOMINATOR;
+        uint256 vestedHalf = totalPurchased - immediate;
+        uint256 elapsed = block.timestamp > vestingStart ? block.timestamp - vestingStart : 0;
+        uint256 vested = elapsed >= BUYER_VESTING_DURATION
+            ? vestedHalf
+            : (vestedHalf * elapsed) / BUYER_VESTING_DURATION;
+        uint256 unlocked = immediate + vested;
+
+        if (unlocked <= claimed[user]) {
+            return 0;
+        }
+        return unlocked - claimed[user];
+    }
+
+    function claimedAmount(address user) external view returns (uint256) {
+        return claimed[user];
     }
 
     function _quote(uint256 usdcAmount) internal returns (uint256 tokensOut) {

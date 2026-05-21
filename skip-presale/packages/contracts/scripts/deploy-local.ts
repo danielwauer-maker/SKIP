@@ -27,7 +27,18 @@ async function main() {
   ]);
   await presale.waitForDeployment();
 
+  const teamVesting = await ethers.deployContract("SkipTeamVesting", [
+    await skip.getAddress(),
+    process.env.TEAM_BENEFICIARY || deployer.address,
+    start,
+    deployer.address
+  ]);
+  await teamVesting.waitForDeployment();
+
   await (await skip.transfer(await presale.getAddress(), PRESALE_ALLOCATION)).wait();
+  if (process.env.TEAM_VESTING_AMOUNT) {
+    await (await skip.transfer(await teamVesting.getAddress(), ethers.parseUnits(process.env.TEAM_VESTING_AMOUNT, 18))).wait();
+  }
 
   await exportAbis();
 
@@ -37,7 +48,9 @@ async function main() {
     usdc: await usdc.getAddress(),
     skipToken: await skip.getAddress(),
     skipPresale: await presale.getAddress(),
+    skipTeamVesting: await teamVesting.getAddress(),
     presaleAllocation: PRESALE_ALLOCATION.toString(),
+    teamVestingAmount: process.env.TEAM_VESTING_AMOUNT || "0",
     start,
     end
   });
