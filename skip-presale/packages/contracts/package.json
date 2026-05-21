@@ -1,0 +1,29 @@
+{
+  "name": "@skip/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:local": "hardhat run scripts/deploy-local.ts --network localhost",
+    "deploy:amoy": "hardhat run scripts/deploy-amoy.ts --network amoy",
+    "export:abi": "hardhat run scripts/export-abi.ts"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.1.0"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-chai-matchers": "^2.0.8",
+    "@nomicfoundation/hardhat-ethers": "^3.0.8",
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@nomicfoundation/hardhat-verify": "^2.0.11",
+    "@types/chai": "^4.3.19",
+    "@types/mocha": "^10.0.9",
+    "chai": "^4.5.0",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.4",
+    "hardhat": "^2.22.15",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  }
+}

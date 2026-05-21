@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  background: #05080d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background:
+    linear-gradient(rgba(73, 255, 208, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(73, 255, 208, 0.05) 1px, transparent 1px),
+    radial-gradient(circle at 50% 0%, rgba(73, 255, 208, 0.16), transparent 34rem),
+    #05080d;
+  background-size: 42px 42px, 42px 42px, auto, auto;
+  color: #eefdf8;
+}
+
+::selection {
+  background: rgba(73, 255, 208, 0.35);
+}
+
+.glass {
+  border: 1px solid rgba(141, 255, 225, 0.16);
+  background: linear-gradient(145deg, rgba(12, 20, 29, 0.9), rgba(7, 11, 18, 0.78));
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(18px);
+}
+
+.neon-text {
+  text-shadow: 0 0 28px rgba(73, 255, 208, 0.4);
+}
+
+.focus-ring {
+  outline: none;
+}
+
+.focus-ring:focus-visible {
+  box-shadow: 0 0 0 3px rgba(73, 255, 208, 0.3);
+}

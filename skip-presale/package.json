@@ -1,0 +1,18 @@
+{
+  "name": "skip-presale",
+  "version": "0.1.0",
+  "private": true,
+  "description": "$SKIP presale monorepo",
+  "scripts": {
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "test": "pnpm --filter @skip/contracts test",
+    "compile": "pnpm --filter @skip/contracts compile",
+    "dev:web": "pnpm --filter @skip/web dev",
+    "export:abi": "pnpm --filter @skip/contracts export:abi"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  },
+  "packageManager": "pnpm@9.12.3"
+}
