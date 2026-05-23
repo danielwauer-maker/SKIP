@@ -28,6 +28,7 @@ export const metadata: Metadata = {
 const nav = [
   ["/presale", "Presale"],
   ["/dashboard", "Dashboard"],
+  ["/referrals", "Referrals"],
   ["/tokenomics", "Tokenomics"],
   ["/roadmap", "Roadmap"],
   ["/faq", "FAQ"]

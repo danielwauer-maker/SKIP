@@ -7,10 +7,10 @@ import { abis, contracts } from "../../config/contracts";
 import { buildBuyerAggregates, buildKpis, buildStageAggregates, buildStageAllocations, detectRiskAlerts, emptyPresaleInfo, normalizePresaleInfo, normalizeStage } from "../../lib/admin-analytics";
 import { formatSkip, formatUsdc, percent } from "../../lib/format";
 import { loadPurchaseEvents } from "../../lib/presale-events";
+import { getPublicEnvWarnings } from "../../lib/env-validation";
 import type { BuyerAggregate, PurchaseEvent } from "../../types/admin";
 import { AdminBuyerTable } from "./admin-buyer-table";
 import { AdminKpiCard } from "./admin-kpi-card";
-import { AdminPlaceholderPanel } from "./admin-placeholder-panel";
 import { AdminRecentTransactions } from "./admin-recent-transactions";
 import { AdminRefreshButton } from "./admin-refresh-button";
 import { AdminRiskPanel } from "./admin-risk-panel";
@@ -18,11 +18,21 @@ import { AdminStageTable } from "./admin-stage-table";
 import { AdminTopWallets } from "./admin-top-wallets";
 import { AdminTreasuryPanel } from "./admin-treasury-panel";
 import { AdminVestingPanel } from "./admin-vesting-panel";
+import { AdminReferralPanel } from "./admin-referral-panel";
 
 const tabs = ["Overview", "Stages", "Buyers", "Transactions", "Treasury", "Vesting", "Risk", "Growth"] as const;
 type Tab = (typeof tabs)[number];
+type SecurityStatus = {
+  authenticated: boolean;
+  chainId: number;
+  dbMode: string;
+  adminSession: boolean;
+  warnings: string[];
+  publicTestnetChecklist: Array<{ label: string; ok: boolean }>;
+  mainnetBlockers: string[];
+};
 
-export function AdminDashboard() {
+export function AdminDashboard({ securityStatus }: { securityStatus: SecurityStatus }) {
   const publicClient = usePublicClient();
   const [activeTab, setActiveTab] = useState<Tab>("Overview");
   const [events, setEvents] = useState<PurchaseEvent[]>([]);
@@ -30,6 +40,7 @@ export function AdminDashboard() {
   const [eventsLoading, setEventsLoading] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date>();
   const lookback = BigInt(process.env.NEXT_PUBLIC_ADMIN_EVENT_LOOKBACK_BLOCKS || "50000");
+  const envWarnings = getPublicEnvWarnings("admin");
 
   const stageContracts = Array.from({ length: 12 }, (_, index) => ({
     address: contracts.skipPresale,
@@ -139,6 +150,43 @@ export function AdminDashboard() {
       <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
         Admin dashboard is not protected yet. Do not deploy publicly without authentication. Frontend guard only. Real auth required before public deployment.
       </div>
+      {envWarnings.length ? (
+        <div className="mt-4 rounded-lg border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
+          <div className="font-semibold">Developer preflight warnings</div>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {envWarnings.map((warning) => <li key={warning}>{warning}</li>)}
+          </ul>
+        </div>
+      ) : null}
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+        <div className="rounded-lg border border-line bg-black/30 p-4">
+          <h2 className="font-bold text-white">Security Status</h2>
+          <div className="mt-3 grid gap-2 text-sm text-slate-300">
+            <div>Auth status: {securityStatus.authenticated ? "Authenticated" : "Not authenticated"}</div>
+            <div>Admin session: {securityStatus.adminSession ? "Active" : "Inactive"}</div>
+            <div>Current chain ID: {securityStatus.chainId}</div>
+            <div>DB mode: {securityStatus.dbMode}</div>
+          </div>
+          <form action="/api/admin/logout" method="post" className="mt-4">
+            <button className="rounded-md border border-line px-3 py-2 text-sm font-semibold text-white hover:border-neon" type="submit">Logout</button>
+          </form>
+        </div>
+        <div className="rounded-lg border border-line bg-black/30 p-4">
+          <h2 className="font-bold text-white">Public Testnet Readiness</h2>
+          <div className="mt-3 grid gap-2 text-sm">
+            {securityStatus.publicTestnetChecklist.map((item) => (
+              <div key={item.label} className={item.ok ? "text-neon" : "text-amber-100"}>{item.ok ? "OK" : "Needs check"} - {item.label}</div>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-lg border border-line bg-black/30 p-4">
+          <h2 className="font-bold text-white">Mainnet Blockers</h2>
+          <div className="mt-3 grid gap-2 text-sm text-amber-100">
+            {securityStatus.mainnetBlockers.map((blocker) => <div key={blocker}>Open - {blocker}</div>)}
+          </div>
+        </div>
+      </div>
 
       <div className="mt-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
@@ -209,20 +257,7 @@ export function AdminDashboard() {
           />
         ) : null}
         {activeTab === "Risk" ? <AdminRiskPanel presale={presale} alerts={alerts} paused={paused} owner={owner} totalSupply={tokenTotalSupply} presaleTokenBalance={presaleTokenBalance} /> : null}
-        {activeTab === "Growth" ? (
-          <div className="grid gap-6">
-            <AdminPlaceholderPanel
-              title="Referral / XP"
-              metrics={["Total Referrals", "Top Referrers", "Referral Conversion", "XP issued", "Founder ranks"]}
-              todos={["Backend required", "Database required", "Anti-Sybil required", "Referral links", "XP ledger", "Leaderboard"]}
-            />
-            <AdminPlaceholderPanel
-              title="Marketing Analytics"
-              metrics={["Visits", "Wallet Connect Rate", "Buy Conversion Rate", "Campaign Source", "UTM Tracking", "Telegram/Discord Growth", "X/TikTok Campaigns"]}
-              todos={["Tracking integration", "Consent/privacy design", "UTM capture", "Campaign dashboard", "Community growth imports"]}
-            />
-          </div>
-        ) : null}
+        {activeTab === "Growth" ? <AdminReferralPanel /> : null}
       </div>
     </main>
   );

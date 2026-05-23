@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum ReferralStatus {
+  PENDING
+  QUALIFIED
+  REJECTED
+}
+
+enum QuestCompletionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id             String             @id @default(cuid())
+  walletAddress  String             @unique
+  referralCode   String             @unique
+  referredById   String?
+  referredBy     User?              @relation("UserReferrals", fields: [referredById], references: [id])
+  referredUsers  User[]             @relation("UserReferrals")
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  lastSeenAt     DateTime           @default(now())
+  xpTotal        Int                @default(0)
+  rank           String             @default("Visitor")
+  isOgFounder    Boolean            @default(false)
+  isBanned       Boolean            @default(false)
+  notes          String?
+  referralClicks ReferralClick[]
+  referralsMade  Referral[]         @relation("ReferrerReferrals")
+  referralEntry  Referral?          @relation("ReferredUserReferral")
+  xpLedger       XpLedger[]
+  completions    QuestCompletion[]
+
+  @@index([xpTotal])
+  @@index([referredById])
+}
+
+model ReferralClick {
+  id            String    @id @default(cuid())
+  referralCode  String
+  referrerId    String?
+  referrer      User?     @relation(fields: [referrerId], references: [id])
+  ipHash        String?
+  userAgentHash String?
+  createdAt     DateTime  @default(now())
+  convertedAt   DateTime?
+
+  @@index([referralCode])
+  @@index([referrerId])
+}
+
+model Referral {
+  id              String         @id @default(cuid())
+  referrerId      String
+  referrer        User           @relation("ReferrerReferrals", fields: [referrerId], references: [id])
+  referredUserId  String         @unique
+  referredUser    User           @relation("ReferredUserReferral", fields: [referredUserId], references: [id])
+  status          ReferralStatus @default(PENDING)
+  source          String         @default("referral_link")
+  createdAt       DateTime       @default(now())
+  qualifiedAt     DateTime?
+  rejectedReason  String?
+
+  @@index([referrerId])
+  @@index([status])
+}
+
+model XpLedger {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  actionType String
+  points    Int
+  metadata  String?
+  dedupeKey String?  @unique
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([actionType])
+}
+
+model Quest {
+  id                    String            @id @default(cuid())
+  key                   String            @unique
+  title                 String
+  description           String
+  points                Int
+  isActive              Boolean           @default(true)
+  maxCompletionsPerUser Int               @default(1)
+  requiresVerification  Boolean           @default(false)
+  createdAt             DateTime          @default(now())
+  completions           QuestCompletion[]
+}
+
+model QuestCompletion {
+  id         String                @id @default(cuid())
+  userId     String
+  user       User                  @relation(fields: [userId], references: [id])
+  questId    String
+  quest      Quest                 @relation(fields: [questId], references: [id])
+  status     QuestCompletionStatus @default(PENDING)
+  proof      String?
+  createdAt  DateTime              @default(now())
+  approvedAt DateTime?
+
+  @@index([userId])
+  @@index([questId])
+}

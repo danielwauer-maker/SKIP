@@ -51,6 +51,7 @@ contract SkipPresale is Ownable, Pausable, ReentrancyGuard {
     uint256 public constant BPS_DENOMINATOR = 10_000;
     uint256 public constant IMMEDIATE_CLAIM_BPS = 5_000;
     uint256 public constant BUYER_VESTING_DURATION = 90 days;
+    uint256 private constant MAX_PRICE_DUST_USDC = 38;
 
     Stage[] private stages;
     mapping(address => uint256) public contributed;
@@ -89,6 +90,7 @@ contract SkipPresale is Ownable, Pausable, ReentrancyGuard {
     error NothingToRefund();
     error AlreadyClaimed();
     error AlreadyRefunded();
+    error AlreadyFinalized();
     error SoftCapNotReached();
     error SoftCapReached();
     error InsufficientRefundLiquidity();
@@ -128,18 +130,18 @@ contract SkipPresale is Ownable, Pausable, ReentrancyGuard {
         if (block.timestamp < startTime) revert PresaleNotStarted();
         if (block.timestamp > endTime) revert PresaleEnded();
         if (usdcAmount == 0) revert InvalidAmount();
-        if (totalRaised + usdcAmount > HARD_CAP) revert HardCapExceeded();
-
-        uint256 tokensToBuy = _quote(usdcAmount);
+        if (totalRaised >= HARD_CAP) revert HardCapExceeded();
+        (uint256 tokensToBuy, uint256 usdcUsed) = _quote(usdcAmount);
         if (tokensToBuy == 0) revert InvalidAmount();
+        if (totalRaised + usdcUsed > HARD_CAP) revert HardCapExceeded();
 
-        usdc.safeTransferFrom(msg.sender, address(this), usdcAmount);
-        contributed[msg.sender] += usdcAmount;
+        usdc.safeTransferFrom(msg.sender, address(this), usdcUsed);
+        contributed[msg.sender] += usdcUsed;
         purchased[msg.sender] += tokensToBuy;
-        totalRaised += usdcAmount;
+        totalRaised += usdcUsed;
         totalSold += tokensToBuy;
 
-        emit TokensPurchased(msg.sender, usdcAmount, tokensToBuy);
+        emit TokensPurchased(msg.sender, usdcUsed, tokensToBuy);
     }
 
     function claim() external nonReentrant {
@@ -167,7 +169,7 @@ contract SkipPresale is Ownable, Pausable, ReentrancyGuard {
     }
 
     function finalize() external onlyOwner {
-        if (finalized) revert NotFinalized();
+        if (finalized) revert AlreadyFinalized();
         if (block.timestamp <= endTime && totalRaised < HARD_CAP && !allStagesSoldOut()) revert PresaleStillActive();
 
         finalized = true;
@@ -345,7 +347,7 @@ contract SkipPresale is Ownable, Pausable, ReentrancyGuard {
         return claimed[user];
     }
 
-    function _quote(uint256 usdcAmount) internal returns (uint256 tokensOut) {
+    function _quote(uint256 usdcAmount) internal returns (uint256 tokensOut, uint256 usdcUsedTotal) {
         uint256 remainingUsdc = usdcAmount;
         for (uint256 i = 0; i < stages.length && remainingUsdc > 0; i++) {
             Stage storage stage = stages[i];
@@ -359,10 +361,16 @@ contract SkipPresale is Ownable, Pausable, ReentrancyGuard {
             uint256 usdcUsed = (tokensForStage * stage.priceUsdc) / 1e18;
             stage.sold += tokensForStage;
             tokensOut += tokensForStage;
+            usdcUsedTotal += usdcUsed;
             remainingUsdc -= usdcUsed;
+
+            if (stage.sold < stage.tokenCap) break;
         }
 
-        if (remainingUsdc > 0) revert SoldOut();
+        // Prices are expressed in 6-decimal USDC base units while SKIP has 18 decimals.
+        // For prices that do not divide 1e18 evenly, flooring can leave a few USDC
+        // base units that cannot buy another token unit without over-allocating SKIP.
+        if (remainingUsdc > MAX_PRICE_DUST_USDC) revert SoldOut();
     }
 
     function _previewTokens(uint256 usdcAmount) internal view returns (uint256 tokensOut) {

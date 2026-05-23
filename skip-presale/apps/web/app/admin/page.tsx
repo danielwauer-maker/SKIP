@@ -1,6 +1,9 @@
 import { AdminDashboard } from "../../components/admin/admin-dashboard";
+import { hasAdminSession } from "../../lib/admin-auth";
+import { getServerSecurityStatus } from "../../lib/env-validation";
+import { redirect } from "next/navigation";
 
-export default function AdminPage() {
+export default async function AdminPage() {
   if (process.env.NEXT_PUBLIC_ENABLE_ADMIN !== "true") {
     return (
       <main className="mx-auto max-w-3xl px-4 py-20">
@@ -17,5 +20,7 @@ export default function AdminPage() {
     );
   }
 
-  return <AdminDashboard />;
+  if (!(await hasAdminSession())) redirect("/admin/login");
+
+  return <AdminDashboard securityStatus={getServerSecurityStatus()} />;
 }

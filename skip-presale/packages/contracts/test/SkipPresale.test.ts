@@ -6,7 +6,23 @@ const USDC = (value: string) => ethers.parseUnits(value, 6);
 const SKIP = (value: string) => ethers.parseUnits(value, 18);
 const PRESALE_ALLOCATION = SKIP("240000000000");
 const FULL_STAGE_RAISE = USDC("3720000");
+const SOFTCAP_WITH_DUST_BUFFER = USDC("250000") + 1n;
 const DAY = 24 * 60 * 60;
+const STAGE_PRICES = [4n, 5n, 6n, 8n, 9n, 11n, 13n, 16n, 20n, 25n, 31n, 38n] as const;
+const STAGE_RAISES = [
+  USDC("80000"),
+  USDC("100000"),
+  USDC("120000"),
+  USDC("160000"),
+  USDC("180000"),
+  USDC("220000"),
+  USDC("260000"),
+  USDC("320000"),
+  USDC("400000"),
+  USDC("500000"),
+  USDC("620000"),
+  USDC("760000")
+] as const;
 
 async function deployFixture(offsetStart = -10, duration = 30 * 24 * 60 * 60) {
   const [owner, buyer, buyer2, treasury] = await ethers.getSigners();
@@ -88,6 +104,64 @@ describe("SkipPresale", function () {
     expect(await presale.getCurrentStage()).to.equal(1);
   });
 
+  it("sells each exact stage raise without exceeding stage caps", async function () {
+    const { buyer, presale } = await deployFixture();
+
+    for (let index = 0; index < STAGE_RAISES.length; index++) {
+      await presale.connect(buyer).buy(STAGE_RAISES[index]);
+      const stage = await presale.getStage(index);
+      expect(stage.sold).to.equal(SKIP("20000000000"));
+    }
+
+    expect(await presale.totalStageRaise()).to.equal(await presale.HARD_CAP());
+    expect((await presale.getPresaleInfo()).totalRaised).to.equal(FULL_STAGE_RAISE);
+    expect(await presale.allStagesSoldOut()).to.equal(true);
+  });
+
+  it("accepts dust-producing buys at every stage price and only records USDC actually used", async function () {
+    for (let index = 0; index < STAGE_PRICES.length; index++) {
+      const { buyer, usdc, presale } = await deployFixture();
+      for (let previous = 0; previous < index; previous++) {
+        await presale.connect(buyer).buy(STAGE_RAISES[previous]);
+      }
+
+      const beforeBuyerUsdc = await usdc.balanceOf(buyer.address);
+      const beforeInfo = await presale.getPresaleInfo();
+      const amount = USDC("1");
+      const expectedTokens = (amount * 10n ** 18n) / STAGE_PRICES[index];
+      const expectedUsed = (expectedTokens * STAGE_PRICES[index]) / 10n ** 18n;
+
+      await expect(presale.connect(buyer).buy(amount))
+        .to.emit(presale, "TokensPurchased")
+        .withArgs(buyer.address, expectedUsed, expectedTokens);
+
+      const afterInfo = await presale.getPresaleInfo();
+      expect(afterInfo.totalRaised - beforeInfo.totalRaised).to.equal(expectedUsed);
+      expect(afterInfo.totalSold - beforeInfo.totalSold).to.equal(expectedTokens);
+      expect(beforeBuyerUsdc - (await usdc.balanceOf(buyer.address))).to.equal(expectedUsed);
+      const stage = await presale.getStage(index);
+      expect(stage.sold).to.equal(expectedTokens);
+      expect(stage.sold).to.be.lte(stage.tokenCap);
+    }
+  });
+
+  it("handles dust across stage boundaries for non-even prices", async function () {
+    for (const stageIndex of [2, 5, 6, 10, 11]) {
+      const { buyer, presale } = await deployFixture();
+      for (let previous = 0; previous < stageIndex; previous++) {
+        await presale.connect(buyer).buy(STAGE_RAISES[previous]);
+      }
+
+      const amount = STAGE_RAISES[stageIndex] + 1n;
+      await expect(presale.connect(buyer).buy(amount)).to.emit(presale, "TokensPurchased");
+
+      const stage = await presale.getStage(stageIndex);
+      expect(stage.sold).to.equal(stage.tokenCap);
+      expect(stage.sold).to.be.lte(stage.tokenCap);
+      expect((await presale.getPresaleInfo()).totalRaised).to.be.lte(await presale.HARD_CAP());
+    }
+  });
+
   it("strictly enforces the hardcap", async function () {
     const { buyer, buyer2, presale } = await deployFixture();
 
@@ -122,7 +196,7 @@ describe("SkipPresale", function () {
   it("enables claim after a successful finalize and blocks claim before finalize", async function () {
     const { owner, buyer, skip, presale, end } = await deployFixture();
 
-    await presale.connect(buyer).buy(USDC("250000"));
+    await presale.connect(buyer).buy(SOFTCAP_WITH_DUST_BUFFER);
     await expect(presale.connect(buyer).claim()).to.be.revertedWithCustomError(presale, "ClaimNotEnabled");
 
     await time.increaseTo(end + 1);
@@ -222,10 +296,39 @@ describe("SkipPresale", function () {
     await expect(presale.connect(buyer).buy(1)).to.be.revertedWithCustomError(presale, "HardCapExceeded");
   });
 
+  it("allows a near-hardcap buy with only rounding dust left unspent", async function () {
+    const { buyer, usdc, presale } = await deployFixture();
+
+    await presale.connect(buyer).buy(FULL_STAGE_RAISE - 38n);
+    const before = await usdc.balanceOf(buyer.address);
+    await expect(presale.connect(buyer).buy(39n)).to.emit(presale, "TokensPurchased");
+
+    const info = await presale.getPresaleInfo();
+    expect(info.totalRaised).to.be.lte(await presale.HARD_CAP());
+    expect(info.totalSold).to.equal(PRESALE_ALLOCATION);
+    expect(await presale.allStagesSoldOut()).to.equal(true);
+    expect(before - (await usdc.balanceOf(buyer.address))).to.equal(38n);
+  });
+
+  it("reverts real oversubscription beyond final-stage dust tolerance", async function () {
+    const { buyer, presale } = await deployFixture();
+
+    await presale.connect(buyer).buy(FULL_STAGE_RAISE - 38n);
+    await expect(presale.connect(buyer).buy(77n)).to.be.revertedWithCustomError(presale, "SoldOut");
+  });
+
+  it("reverts with AlreadyFinalized on repeated finalize", async function () {
+    const { owner, buyer, presale } = await deployFixture();
+
+    await presale.connect(buyer).buy(FULL_STAGE_RAISE);
+    await presale.connect(owner).finalize();
+    await expect(presale.connect(owner).finalize()).to.be.revertedWithCustomError(presale, "AlreadyFinalized");
+  });
+
   it("vests buyer claims: 50 percent immediately, 75 percent after 45 days, 100 percent after 90 days", async function () {
     const { owner, buyer, skip, presale, end } = await deployFixture();
 
-    await presale.connect(buyer).buy(USDC("250000"));
+    await presale.connect(buyer).buy(SOFTCAP_WITH_DUST_BUFFER);
     const purchasedAmount = (await presale.getUserInfo(buyer.address)).purchased;
     await time.increaseTo(end + 1);
     await presale.connect(owner).finalize();
@@ -263,7 +366,7 @@ describe("SkipPresale", function () {
   it("allows remaining funds withdrawal only after successful finalize", async function () {
     const { owner, buyer, treasury, usdc, presale, end } = await deployFixture();
 
-    await presale.connect(buyer).buy(USDC("250000"));
+    await presale.connect(buyer).buy(SOFTCAP_WITH_DUST_BUFFER);
     await expect(presale.connect(owner).withdrawRemainingFunds(treasury.address)).to.be.revertedWithCustomError(
       presale,
       "NotFinalized"
@@ -281,7 +384,7 @@ describe("SkipPresale", function () {
   it("withdraws unsold tokens without touching claimable balances", async function () {
     const { owner, buyer, treasury, skip, presale, end } = await deployFixture();
 
-    await presale.connect(buyer).buy(USDC("250000"));
+    await presale.connect(buyer).buy(SOFTCAP_WITH_DUST_BUFFER);
     const purchasedAmount = (await presale.getUserInfo(buyer.address)).purchased;
     await time.increaseTo(end + 1);
     await presale.connect(owner).finalize();

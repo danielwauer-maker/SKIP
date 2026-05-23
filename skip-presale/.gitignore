@@ -12,3 +12,5 @@ typechain-types
 deployment-*.json
 *.log
 *.tsbuildinfo
+*.db
+*.db-journal

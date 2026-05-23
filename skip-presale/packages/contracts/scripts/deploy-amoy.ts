@@ -2,6 +2,9 @@ import { ethers, run } from "hardhat";
 import { exportAbis } from "./export-abi";
 
 const PRESALE_ALLOCATION = ethers.parseUnits("240000000000", 18);
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+type AmoyMode = "mock" | "usdc";
 
 async function maybeVerify(address: string, args: unknown[]) {
   if (!process.env.POLYGONSCAN_API_KEY) return;
@@ -13,15 +16,27 @@ async function maybeVerify(address: string, args: unknown[]) {
 }
 
 async function main() {
+  const mode = process.env.DEPLOY_AMOY_MODE as AmoyMode | undefined;
+  if (mode !== "mock" && mode !== "usdc") {
+    throw new Error(
+      "deploy:amoy is intentionally disabled. Use deploy:amoy:mock for public testnet simulation or deploy:amoy:usdc with USDC_ADDRESS."
+    );
+  }
+
   const [deployer] = await ethers.getSigners();
   const now = Math.floor(Date.now() / 1000);
   const start = Number(process.env.PRESALE_START || now + 10 * 60);
   const end = Number(process.env.PRESALE_END || now + 30 * 24 * 60 * 60);
 
   const usdcAddress = process.env.USDC_ADDRESS;
-  const usdc = usdcAddress
-    ? await ethers.getContractAt("MockUSDC", usdcAddress)
-    : await ethers.deployContract("MockUSDC", [deployer.address]);
+  if (mode === "usdc" && (!usdcAddress || !ethers.isAddress(usdcAddress) || usdcAddress === ZERO_ADDRESS)) {
+    throw new Error("deploy:amoy:usdc requires a non-zero USDC_ADDRESS.");
+  }
+
+  const usdc =
+    mode === "mock"
+      ? await ethers.deployContract("MockUSDC", [deployer.address])
+      : await ethers.getContractAt("MockUSDC", usdcAddress as string);
   await usdc.waitForDeployment();
 
   const skipArgs = [deployer.address];
@@ -54,6 +69,11 @@ async function main() {
 
   console.log({
     network: "polygon-amoy",
+    mode,
+    warning:
+      mode === "mock"
+        ? "USING MOCK USDC - NOT REAL PRESALE PAYMENT TOKEN"
+        : "Using externally provided USDC_ADDRESS. Confirm token decimals and address before public use.",
     deployer: deployer.address,
     usdc: await usdc.getAddress(),
     skipToken: await skip.getAddress(),

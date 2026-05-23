@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import { useAccount, useChainId, useReadContract, useReadContracts, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { abis, contracts, hasConfiguredContracts } from "../config/contracts";
 import { targetChain, targetChainId } from "../config/chains";
+import { getPublicEnvWarnings } from "../lib/env-validation";
 import { formatSkip, formatUsdc, parseUsdc, percent } from "../lib/format";
 import { validateContribution } from "../lib/validation";
 import { StageProgress } from "./stage-progress";
@@ -92,6 +93,20 @@ export function PresaleCard() {
     query: { enabled: configured, refetchOnWindowFocus: false, staleTime: Number.POSITIVE_INFINITY }
   });
 
+  const { data: allStagesSoldOut } = useReadContract({
+    address: contracts.skipPresale,
+    abi: abis.skipPresale,
+    functionName: "allStagesSoldOut",
+    query: { enabled: configured, refetchOnWindowFocus: false, staleTime: 30_000 }
+  });
+
+  const { data: paused } = useReadContract({
+    address: contracts.skipPresale,
+    abi: abis.skipPresale,
+    functionName: "paused",
+    query: { enabled: configured, refetchOnWindowFocus: false, staleTime: 30_000 }
+  });
+
   const { data: quote } = useReadContract({
     address: contracts.skipPresale,
     abi: abis.skipPresale,
@@ -129,6 +144,18 @@ export function PresaleCard() {
   const totalProgress = percent(info.totalRaised, info.hardCap);
   const validation = validateContribution(amount, usdcBalance);
   const wrongNetwork = isConnected && chainId !== targetChainId;
+  const saleClosed = info.finalized || info.totalRaised >= info.hardCap || Boolean(allStagesSoldOut) || info.refundEnabled || info.claimEnabled;
+  const buyBlockedReason =
+    paused ? "Presale is paused." :
+    info.refundEnabled ? "Refund mode is enabled. Use the dashboard to refund." :
+    info.claimEnabled ? "Claim mode is enabled. Use the dashboard to claim." :
+    info.finalized ? "Presale is finalized." :
+    info.totalRaised >= info.hardCap ? "Hardcap reached." :
+    allStagesSoldOut ? "All stages are sold out." :
+    null;
+  const amountCrossesStage = usdcAmount > usdcUntilNextStage && usdcUntilNextStage > 0n;
+  const largeBuyWarning = amountCrossesStage || usdcAmount >= BigInt(250_000) * BigInt(1_000_000);
+  const envWarnings = getPublicEnvWarnings("presale");
 
   async function approve() {
     writeContract({
@@ -175,6 +202,15 @@ export function PresaleCard() {
             </div>
           ) : null}
 
+          {envWarnings.length && process.env.NODE_ENV !== "production" ? (
+            <div className="mt-4 rounded-md border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
+              <div className="font-semibold">Developer preflight warnings</div>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {envWarnings.map((warning) => <li key={warning}>{warning}</li>)}
+              </ul>
+            </div>
+          ) : null}
+
           {wrongNetwork ? (
             <button
               className="focus-ring mt-4 w-full rounded-md bg-neon px-4 py-3 font-semibold text-ink"
@@ -207,6 +243,16 @@ export function PresaleCard() {
                 <AlertTriangle size={16} /> {validation}
               </div>
             ) : null}
+            {buyBlockedReason ? (
+              <div className="flex items-center gap-2 rounded-md border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">
+                <AlertTriangle size={16} /> {buyBlockedReason}
+              </div>
+            ) : null}
+            {largeBuyWarning && !buyBlockedReason ? (
+              <div className="rounded-md border border-line bg-black/30 p-3 text-sm leading-6 text-slate-300">
+                This amount may cross a stage boundary or create a larger transaction. Consider buying in smaller stage-sized blocks for clearer pricing and lower gas risk.
+              </div>
+            ) : null}
             {error ? (
               <div className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-100">
                 {error.message}
@@ -225,14 +271,14 @@ export function PresaleCard() {
             <div className="grid gap-3 sm:grid-cols-2">
               <button
                 onClick={approve}
-                disabled={!isConnected || wrongNetwork || !needsApproval || Boolean(validation) || isPending || isConfirming}
+                disabled={!isConnected || wrongNetwork || saleClosed || Boolean(paused) || !needsApproval || Boolean(validation) || isPending || isConfirming}
                 className="focus-ring rounded-md border border-line px-4 py-3 font-semibold text-white transition hover:border-neon disabled:cursor-not-allowed disabled:opacity-45"
               >
                 {isPending && needsApproval ? <Loader2 className="mx-auto animate-spin" /> : "Approve USDC"}
               </button>
               <button
                 onClick={buy}
-                disabled={!isConnected || wrongNetwork || needsApproval || Boolean(validation) || isPending || isConfirming}
+                disabled={!isConnected || wrongNetwork || saleClosed || Boolean(paused) || needsApproval || Boolean(validation) || isPending || isConfirming}
                 className="focus-ring rounded-md bg-neon px-4 py-3 font-semibold text-ink transition hover:bg-acid disabled:cursor-not-allowed disabled:opacity-45"
               >
                 {isPending || isConfirming ? <Loader2 className="mx-auto animate-spin" /> : "Buy $SKIP"}

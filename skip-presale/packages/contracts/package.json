@@ -7,11 +7,14 @@
     "test": "hardhat test",
     "deploy:local": "hardhat run scripts/deploy-local.ts --network localhost",
     "deploy:amoy": "hardhat run scripts/deploy-amoy.ts --network amoy",
+    "deploy:amoy:mock": "hardhat run scripts/deploy-amoy-mock.ts --network amoy",
+    "deploy:amoy:usdc": "hardhat run scripts/deploy-amoy-usdc.ts --network amoy",
     "export:abi": "hardhat run scripts/export-abi.ts",
     "mint:usdc": "hardhat run scripts/mint-mock-usdc.ts --network localhost",
     "faucet:dev": "hardhat run scripts/faucet-dev.ts --network localhost",
     "simulate:presale": "hardhat run scripts/simulate-presale.ts --network localhost",
-    "finalize:local": "hardhat run scripts/finalize-local.ts --network localhost"
+    "finalize:local": "hardhat run scripts/finalize-local.ts --network localhost",
+    "e2e:local": "hardhat run scripts/e2e-local-flow.ts --network localhost"
   },
   "dependencies": {
     "@openzeppelin/contracts": "^5.1.0"
