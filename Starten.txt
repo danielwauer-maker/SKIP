@@ -138,3 +138,40 @@ corepack pnpm --filter @skip/contracts deploy:local
 
 und die neuen Contract-Adressen wieder
 in apps\web\.env.local eintragen.
+
+
+---------------------------------------------------------------------
+MockUSDC minten:
+---------------------------------------------------------------------
+
+$env:MOCK_USDC_ADDRESS="0x5FbDB2315678afecb367f032d93F642f64180aa3"
+$env:RECIPIENT_ADDRESS="0x90F79bf6EB2c4f870365E785982E1f101E93b906"
+$env:AMOUNT_USDC="10000000"
+
+corepack pnpm --filter @skip/contracts mint:usdc
+
+
+
+---------------------------------------------------------------------
+Einfacher Start mit Scripten:
+---------------------------------------------------------------------
+
+# Terminal 1
+cd C:\Users\Tardis-Admin\Documents\SKIP\skip-presale\packages\contracts
+corepack pnpm exec hardhat node
+
+# Terminal 2
+cd C:\Users\Tardis-Admin\Documents\SKIP\skip-presale
+
+corepack pnpm --filter @skip/contracts deploy:local
+
+$env:RECIPIENT_ADDRESS="0xDEINE_METAMASK_ADRESSE"
+$env:MOCK_USDC_ADDRESS="DEINE_MOCK_USDC_ADRESSE"
+corepack pnpm --filter @skip/contracts faucet:dev
+
+$env:SKIP_PRESALE_ADDRESS="DEINE_PRESALE_ADRESSE"
+corepack pnpm --filter @skip/contracts simulate:presale
+
+corepack pnpm --filter @skip/contracts finalize:local
+
+corepack pnpm --filter @skip/web dev

@@ -19,20 +19,35 @@ type PresaleInfoTuple = readonly [
   bigint,
   bigint
 ];
+type PresaleInfoObject = {
+  totalRaised: bigint;
+  totalSold: bigint;
+  softCap: bigint;
+  hardCap: bigint;
+  currentStage: bigint;
+  startTime: bigint;
+  endTime: bigint;
+  finalized: boolean;
+  claimEnabled: boolean;
+  refundEnabled: boolean;
+  developmentWithdrawn: bigint;
+  maxDevelopmentWithdrawable: bigint;
+  completedStageRaised: bigint;
+};
 
 export function TransparencySection() {
   const { data } = useReadContract({
     address: contracts.skipPresale,
     abi: abis.skipPresale,
     functionName: "getPresaleInfo",
-    query: { enabled: hasConfiguredContracts(), refetchInterval: 12_000 }
+    query: { enabled: hasConfiguredContracts(), refetchOnWindowFocus: false, staleTime: 30_000 }
   });
-  const info = data as PresaleInfoTuple | undefined;
+  const info = normalizePresaleInfo(data as PresaleInfoTuple | PresaleInfoObject | undefined);
   const lockedFunds =
-    (info?.[0] ?? BigInt(0)) > (info?.[10] ?? BigInt(0))
-      ? (info?.[0] ?? BigInt(0)) - (info?.[10] ?? BigInt(0))
+    info.totalRaised > info.developmentWithdrawn
+      ? info.totalRaised - info.developmentWithdrawn
       : BigInt(0);
-  const remainingTokens = BigInt("240000000000000000000000000000") - (info?.[1] ?? BigInt(0));
+  const remainingTokens = BigInt("240000000000000000000000000000") - info.totalSold;
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-16">
@@ -42,18 +57,58 @@ export function TransparencySection() {
         progress.
       </p>
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Metric label="totalRaised" value={`${formatUsdc(info?.[0])} USDC`} />
-        <Metric label="completedStageRaised" value={`${formatUsdc(info?.[12])} USDC`} />
-        <Metric label="developmentWithdrawn" value={`${formatUsdc(info?.[10])} USDC`} />
+        <Metric label="totalRaised" value={`${formatUsdc(info.totalRaised)} USDC`} />
+        <Metric label="completedStageRaised" value={`${formatUsdc(info.completedStageRaised)} USDC`} />
+        <Metric label="developmentWithdrawn" value={`${formatUsdc(info.developmentWithdrawn)} USDC`} />
         <Metric label="lockedFunds" value={`${formatUsdc(lockedFunds)} USDC`} />
         <Metric label="treasuryAllocation" value="25% of completed stages only" />
-        <Metric label="currentStage" value={`${Number(info?.[4] ?? BigInt(0)) + 1} / 12`} />
-        <Metric label="totalSold" value={`${formatSkip(info?.[1])} SKIP`} />
+        <Metric label="currentStage" value={`${Number(info.currentStage) + 1} / 12`} />
+        <Metric label="totalSold" value={`${formatSkip(info.totalSold)} SKIP`} />
         <Metric label="remainingTokens" value={`${formatSkip(remainingTokens)} SKIP`} />
-        <Metric label="maxDevWithdrawable" value={`${formatUsdc(info?.[11])} USDC`} />
+        <Metric label="maxDevWithdrawable" value={`${formatUsdc(info.maxDevelopmentWithdrawable)} USDC`} />
       </div>
     </section>
   );
+}
+
+function normalizePresaleInfo(info?: PresaleInfoTuple | PresaleInfoObject): PresaleInfoObject {
+  if (!info) {
+    return {
+      totalRaised: BigInt(0),
+      totalSold: BigInt(0),
+      softCap: BigInt(0),
+      hardCap: BigInt(0),
+      currentStage: BigInt(0),
+      startTime: BigInt(0),
+      endTime: BigInt(0),
+      finalized: false,
+      claimEnabled: false,
+      refundEnabled: false,
+      developmentWithdrawn: BigInt(0),
+      maxDevelopmentWithdrawable: BigInt(0),
+      completedStageRaised: BigInt(0)
+    };
+  }
+
+  if (Array.isArray(info)) {
+    return {
+      totalRaised: info[0],
+      totalSold: info[1],
+      softCap: info[2],
+      hardCap: info[3],
+      currentStage: info[4],
+      startTime: info[5],
+      endTime: info[6],
+      finalized: info[7],
+      claimEnabled: info[8],
+      refundEnabled: info[9],
+      developmentWithdrawn: info[10],
+      maxDevelopmentWithdrawable: info[11],
+      completedStageRaised: info[12]
+    };
+  }
+
+  return info as PresaleInfoObject;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

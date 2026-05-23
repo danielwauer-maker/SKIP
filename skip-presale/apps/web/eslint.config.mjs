@@ -4,6 +4,11 @@ const compat = new FlatCompat({
   baseDirectory: import.meta.dirname
 });
 
-const eslintConfig = [...compat.extends("next/core-web-vitals")];
+const eslintConfig = [
+  {
+    ignores: [".next/**", "node_modules/**"]
+  },
+  ...compat.extends("next/core-web-vitals")
+];
 
 export default eslintConfig;

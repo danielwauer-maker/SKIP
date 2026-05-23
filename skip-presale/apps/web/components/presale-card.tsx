@@ -5,10 +5,8 @@ import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import { useAccount, useChainId, useReadContract, useReadContracts, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { abis, contracts, hasConfiguredContracts } from "../config/contracts";
 import { targetChain, targetChainId } from "../config/chains";
-import { presaleStages } from "../config/presale";
 import { formatSkip, formatUsdc, parseUsdc, percent } from "../lib/format";
 import { validateContribution } from "../lib/validation";
-import { Countdown } from "./countdown";
 import { StageProgress } from "./stage-progress";
 import { WalletConnectButton } from "./wallet-connect-button";
 
@@ -27,6 +25,27 @@ type PresaleInfoTuple = readonly [
   bigint,
   bigint
 ];
+type PresaleInfoObject = {
+  totalRaised: bigint;
+  totalSold: bigint;
+  softCap: bigint;
+  hardCap: bigint;
+  currentStage: bigint;
+  startTime: bigint;
+  endTime: bigint;
+  finalized: boolean;
+  claimEnabled: boolean;
+  refundEnabled: boolean;
+  developmentWithdrawn: bigint;
+  maxDevelopmentWithdrawable: bigint;
+  completedStageRaised: bigint;
+};
+type StageTuple = readonly [bigint, bigint, bigint];
+type StageObject = {
+  tokenCap: bigint;
+  sold: bigint;
+  priceUsdc: bigint;
+};
 
 export function PresaleCard() {
   const [amount, setAmount] = useState("100");
@@ -37,23 +56,40 @@ export function PresaleCard() {
   const configured = hasConfiguredContracts();
   const usdcAmount = useMemo(() => parseUsdc(amount), [amount]);
 
-  const { data: receipt, isLoading: isConfirming } = useWaitForTransactionReceipt({ hash });
+  const { data: receipt, isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
   const { data: presaleInfo, refetch: refetchPresale } = useReadContract({
     address: contracts.skipPresale,
     abi: abis.skipPresale,
     functionName: "getPresaleInfo",
-    query: { enabled: configured, refetchInterval: 12_000 }
+    query: { enabled: configured, refetchOnWindowFocus: false, staleTime: 30_000 }
   });
 
-  const info = presaleInfo as PresaleInfoTuple | undefined;
+  const info = normalizePresaleInfo(presaleInfo as PresaleInfoTuple | PresaleInfoObject | undefined);
+  const currentStageIndex = info.currentStage;
+  const nextStageIndex = currentStageIndex < BigInt(11) ? currentStageIndex + BigInt(1) : undefined;
 
-  const { data: stage } = useReadContract({
+  const { data: stage, refetch: refetchStage } = useReadContract({
     address: contracts.skipPresale,
     abi: abis.skipPresale,
     functionName: "getStage",
-    args: [info?.[4] ?? BigInt(0)],
-    query: { enabled: configured && info !== undefined, refetchInterval: 12_000 }
+    args: [currentStageIndex],
+    query: { enabled: configured && presaleInfo !== undefined, refetchOnWindowFocus: false, staleTime: 30_000 }
+  });
+
+  const { data: nextStage, refetch: refetchNextStage } = useReadContract({
+    address: contracts.skipPresale,
+    abi: abis.skipPresale,
+    functionName: "getStage",
+    args: [nextStageIndex ?? currentStageIndex],
+    query: { enabled: configured && nextStageIndex !== undefined, refetchOnWindowFocus: false, staleTime: 30_000 }
+  });
+
+  const { data: totalStageRaise, refetch: refetchTotalStageRaise } = useReadContract({
+    address: contracts.skipPresale,
+    abi: abis.skipPresale,
+    functionName: "totalStageRaise",
+    query: { enabled: configured, refetchOnWindowFocus: false, staleTime: Number.POSITIVE_INFINITY }
   });
 
   const { data: quote } = useReadContract({
@@ -79,15 +115,18 @@ export function PresaleCard() {
         args: [address, contracts.skipPresale]
       }
     ],
-    query: { enabled: configured && Boolean(address), refetchInterval: 12_000 }
+    query: { enabled: configured && Boolean(address), refetchOnWindowFocus: false, staleTime: 30_000 }
   });
 
   const usdcBalance = erc20Data?.[0]?.result as bigint | undefined;
   const allowance = erc20Data?.[1]?.result as bigint | undefined;
   const needsApproval = usdcAmount > BigInt(0) && (allowance ?? BigInt(0)) < usdcAmount;
-  const stageTuple = stage as readonly [bigint, bigint, bigint] | undefined;
-  const stageProgress = percent(stageTuple?.[1], stageTuple?.[0]);
-  const totalProgress = percent(info?.[0], info?.[3]);
+  const currentStage = normalizeStage(stage as StageTuple | StageObject | undefined);
+  const followingStage = normalizeStage(nextStage as StageTuple | StageObject | undefined);
+  const currentStageRemaining = currentStage.tokenCap > currentStage.sold ? currentStage.tokenCap - currentStage.sold : BigInt(0);
+  const usdcUntilNextStage = (currentStageRemaining * currentStage.priceUsdc) / BigInt("1000000000000000000");
+  const stageProgress = percent(currentStage.sold, currentStage.tokenCap);
+  const totalProgress = percent(info.totalRaised, info.hardCap);
   const validation = validateContribution(amount, usdcBalance);
   const wrongNetwork = isConnected && chainId !== targetChainId;
 
@@ -110,10 +149,13 @@ export function PresaleCard() {
   }
 
   useEffect(() => {
-    if (!receipt) return;
+    if (!receipt || !isSuccess) return;
     void refetchPresale();
+    void refetchStage();
+    void refetchNextStage();
+    void refetchTotalStageRaise();
     void refetchErc20();
-  }, [receipt, refetchErc20, refetchPresale]);
+  }, [isSuccess, receipt, refetchErc20, refetchNextStage, refetchPresale, refetchStage, refetchTotalStageRaise]);
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-12" id="presale">
@@ -158,7 +200,7 @@ export function PresaleCard() {
               <span>USDC Balance: {formatUsdc(usdcBalance, 4)}</span>
               <span>Expected SKIP: {formatSkip(quote as bigint | undefined)}</span>
               <span>Allowance: {formatUsdc(allowance, 4)} USDC</span>
-              <span>Stage Price: {presaleStages[Number(info?.[4] || BigInt(0))] || presaleStages[0]} USDC</span>
+              <span>Stage Price: {formatStagePrice(currentStage.priceUsdc)} USDC</span>
             </div>
             {validation ? (
               <div className="flex items-center gap-2 rounded-md border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">
@@ -201,19 +243,35 @@ export function PresaleCard() {
 
         <div className="glass rounded-lg p-6 sm:p-8">
           <div className="mb-6">
-            <div className="text-sm uppercase tracking-[0.2em] text-neon">Stage {Number(info?.[4] || BigInt(0)) + 1} / 12</div>
+            <div className="text-sm uppercase tracking-[0.2em] text-neon">Stage {Number(info.currentStage) + 1} / 12</div>
             <h3 className="mt-2 text-2xl font-bold text-white">Presale Progress</h3>
           </div>
           <div className="grid gap-5">
             <StageProgress label="Current stage" value={stageProgress} />
             <StageProgress label="Raised / hardcap" value={totalProgress} />
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <Metric label="Raised" value={`${formatUsdc(info?.[0])} USDC`} />
-              <Metric label="Hardcap" value={`${formatUsdc(info?.[3])} USDC`} />
-              <Metric label="Sold" value={`${formatSkip(info?.[1])} SKIP`} />
-              <Metric label="Dev unlocked" value={`${formatUsdc(info?.[10])} USDC`} />
+              <Metric label="Raised" value={`${formatUsdc(info.totalRaised)} USDC`} />
+              <Metric label="Hardcap" value={`${formatUsdc(info.hardCap)} USDC`} />
+              <Metric label="Sold" value={`${formatSkip(info.totalSold)} SKIP`} />
+              <Metric label="Dev unlocked" value={`${formatUsdc(info.developmentWithdrawn)} USDC`} />
+              <Metric label="Current stage" value={`${Number(info.currentStage) + 1} / 12`} />
+              <Metric label="Current stage price" value={`${formatStagePrice(currentStage.priceUsdc)} USDC`} />
+              <Metric label="Sold in stage" value={`${formatSkip(currentStage.sold)} SKIP`} />
+              <Metric label="Remaining in stage" value={`${formatSkip(currentStageRemaining)} SKIP`} />
+              <Metric label="USDC until next stage" value={`${formatUsdc(usdcUntilNextStage)} USDC`} />
+              <Metric
+                label="Next stage price"
+                value={nextStageIndex === undefined ? "Final stage" : `${formatStagePrice(followingStage.priceUsdc)} USDC`}
+              />
+              <Metric label="Total stage raise" value={`${formatUsdc(totalStageRaise as bigint | undefined)} USDC`} />
             </div>
-            <Countdown endTime={info?.[6]} />
+            <div className="rounded-md border border-line bg-black/30 p-4 text-sm leading-6 text-slate-300">
+              <div className="font-semibold text-neon">Stage-based presale</div>
+              <div>Current stage remains active until sold out.</div>
+              <div>Next price activates automatically after this stage sells out.</div>
+              <div>Stage-based pricing. No artificial countdown pressure.</div>
+              <div className="mt-2 text-slate-500">Maximum presale end timestamp: {formatDate(info.endTime)}</div>
+            </div>
             <p className="rounded-md border border-line bg-black/30 p-4 text-sm leading-6 text-slate-300">
               Buyer claim: 50% after successful presale finalization, remaining 50% linearly over 90 days.
             </p>
@@ -226,6 +284,67 @@ export function PresaleCard() {
       </div>
     </section>
   );
+}
+
+function normalizePresaleInfo(info?: PresaleInfoTuple | PresaleInfoObject): PresaleInfoObject {
+  if (!info) {
+    return {
+      totalRaised: BigInt(0),
+      totalSold: BigInt(0),
+      softCap: BigInt(0),
+      hardCap: BigInt(0),
+      currentStage: BigInt(0),
+      startTime: BigInt(0),
+      endTime: BigInt(0),
+      finalized: false,
+      claimEnabled: false,
+      refundEnabled: false,
+      developmentWithdrawn: BigInt(0),
+      maxDevelopmentWithdrawable: BigInt(0),
+      completedStageRaised: BigInt(0)
+    };
+  }
+
+  if (Array.isArray(info)) {
+    return {
+      totalRaised: info[0],
+      totalSold: info[1],
+      softCap: info[2],
+      hardCap: info[3],
+      currentStage: info[4],
+      startTime: info[5],
+      endTime: info[6],
+      finalized: info[7],
+      claimEnabled: info[8],
+      refundEnabled: info[9],
+      developmentWithdrawn: info[10],
+      maxDevelopmentWithdrawable: info[11],
+      completedStageRaised: info[12]
+    };
+  }
+
+  return info as PresaleInfoObject;
+}
+
+function normalizeStage(stage?: StageTuple | StageObject): StageObject {
+  if (!stage) {
+    return { tokenCap: BigInt(0), sold: BigInt(0), priceUsdc: BigInt(0) };
+  }
+
+  if (Array.isArray(stage)) {
+    return { tokenCap: stage[0], sold: stage[1], priceUsdc: stage[2] };
+  }
+
+  return stage as StageObject;
+}
+
+function formatStagePrice(priceUsdc?: bigint) {
+  return (Number(priceUsdc ?? BigInt(0)) / 1_000_000).toFixed(6);
+}
+
+function formatDate(timestamp?: bigint) {
+  if (!timestamp || timestamp === BigInt(0)) return "Not configured";
+  return new Date(Number(timestamp) * 1000).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

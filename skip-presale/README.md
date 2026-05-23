@@ -69,6 +69,97 @@ pnpm --filter @skip/contracts deploy:local
 Copy the output addresses into `apps/web/.env.local`.
 Set `TEAM_VESTING_AMOUNT` before deployment if the script should transfer team tokens into `SkipTeamVesting`.
 
+## Mint Local MockUSDC
+
+After local deployment, mint MockUSDC to a wallet on the localhost Hardhat network:
+
+```bash
+cd skip-presale
+MOCK_USDC_ADDRESS=0x... RECIPIENT_ADDRESS=0x... AMOUNT_USDC=100000 pnpm --filter @skip/contracts mint:usdc
+```
+
+PowerShell example:
+
+```powershell
+$env:MOCK_USDC_ADDRESS="0x..."
+$env:RECIPIENT_ADDRESS="0x..."
+$env:AMOUNT_USDC="100000"
+pnpm --filter @skip/contracts mint:usdc
+```
+
+CLI arguments are also supported:
+
+```bash
+pnpm --filter @skip/contracts mint:usdc -- --mock-usdc-address 0x... --recipient-address 0x... --amount-usdc 100000
+```
+
+The default mint amount is `100000` USDC with 6 decimals.
+
+## Local End-to-End Presale Test
+
+Terminal 1:
+
+```bash
+cd skip-presale
+pnpm --filter @skip/contracts hardhat node
+```
+
+Terminal 2:
+
+```bash
+cd skip-presale
+pnpm --filter @skip/contracts deploy:local
+```
+
+Copy `usdc` and `skipPresale` from the deployment output.
+
+PowerShell setup:
+
+```powershell
+$env:MOCK_USDC_ADDRESS="0x..."
+$env:SKIP_PRESALE_ADDRESS="0x..."
+$env:RECIPIENT_ADDRESS="0x..."
+$env:AMOUNT_USDC="5000000"
+$env:MODE="softcap"
+```
+
+Fund your browser wallet with local ETH and MockUSDC:
+
+```bash
+pnpm --filter @skip/contracts faucet:dev
+```
+
+Simulate presale buys:
+
+```bash
+pnpm --filter @skip/contracts simulate:presale
+```
+
+Supported modes:
+
+```powershell
+$env:MODE="softcap"
+pnpm --filter @skip/contracts simulate:presale
+
+$env:MODE="hardcap"
+pnpm --filter @skip/contracts simulate:presale
+
+$env:MODE="sellout"
+pnpm --filter @skip/contracts simulate:presale
+```
+
+Finalize locally. If finalize is only blocked by `endTime` and the softcap is reached, the script advances local EVM time and mines a block.
+
+```bash
+pnpm --filter @skip/contracts finalize:local
+```
+
+Start the web app and test Dashboard/Claim:
+
+```bash
+pnpm dev:web
+```
+
 ## Amoy Deployment
 
 ```bash
@@ -98,7 +189,7 @@ Open `http://localhost:3000`.
 ## Test Purchase Flow
 
 1. Deploy local contracts and copy addresses into `apps/web/.env.local`.
-2. Mint MockUSDC to a local wallet if needed.
+2. Mint MockUSDC to a local wallet with `pnpm --filter @skip/contracts mint:usdc`.
 3. Connect wallet in the frontend.
 4. Approve USDC.
 5. Buy $SKIP.
