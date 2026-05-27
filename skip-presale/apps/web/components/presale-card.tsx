@@ -6,7 +6,7 @@ import { useAccount, useChainId, useReadContract, useReadContracts, useSwitchCha
 import { abis, contracts, hasConfiguredContracts } from "../config/contracts";
 import { targetChain, targetChainId } from "../config/chains";
 import { getPublicEnvWarnings } from "../lib/env-validation";
-import { formatSkip, formatUsdc, parseUsdc, percent } from "../lib/format";
+import { formatBpsToPercent, formatDurationDays, formatSkip, formatUsdc, parseUsdc, percent } from "../lib/format";
 import { validateContribution } from "../lib/validation";
 import { StageProgress } from "./stage-progress";
 import { WalletConnectButton } from "./wallet-connect-button";
@@ -100,6 +100,14 @@ export function PresaleCard() {
     query: { enabled: configured, refetchOnWindowFocus: false, staleTime: 30_000 }
   });
 
+  const { data: vestingConfig } = useReadContracts({
+    contracts: [
+      { address: contracts.skipPresale, abi: abis.skipPresale, functionName: "IMMEDIATE_CLAIM_BPS" },
+      { address: contracts.skipPresale, abi: abis.skipPresale, functionName: "BUYER_VESTING_DURATION" }
+    ],
+    query: { enabled: configured, refetchOnWindowFocus: false, staleTime: Number.POSITIVE_INFINITY }
+  });
+
   const { data: paused } = useReadContract({
     address: contracts.skipPresale,
     abi: abis.skipPresale,
@@ -138,6 +146,9 @@ export function PresaleCard() {
   const needsApproval = usdcAmount > BigInt(0) && (allowance ?? BigInt(0)) < usdcAmount;
   const currentStage = normalizeStage(stage as StageTuple | StageObject | undefined);
   const followingStage = normalizeStage(nextStage as StageTuple | StageObject | undefined);
+  const immediateClaimBps = vestingConfig?.[0]?.result as bigint | undefined;
+  const vestingDuration = vestingConfig?.[1]?.result as bigint | undefined;
+  const linearClaimBps = immediateClaimBps === undefined ? undefined : 10_000n - immediateClaimBps;
   const currentStageRemaining = currentStage.tokenCap > currentStage.sold ? currentStage.tokenCap - currentStage.sold : BigInt(0);
   const usdcUntilNextStage = (currentStageRemaining * currentStage.priceUsdc) / BigInt("1000000000000000000");
   const stageProgress = percent(currentStage.sold, currentStage.tokenCap);
@@ -319,7 +330,8 @@ export function PresaleCard() {
               <div className="mt-2 text-slate-500">Maximum presale end timestamp: {formatDate(info.endTime)}</div>
             </div>
             <p className="rounded-md border border-line bg-black/30 p-4 text-sm leading-6 text-slate-300">
-              Buyer claim: 50% after successful presale finalization, remaining 50% linearly over 90 days.
+              Buyer claim: {formatBpsToPercent(immediateClaimBps)} after successful presale finalization, remaining{" "}
+              {formatBpsToPercent(linearClaimBps)} linearly over {formatDurationDays(vestingDuration)}.
             </p>
             <p className="rounded-md border border-line bg-black/30 p-4 text-sm leading-6 text-slate-300">
               25% of funds from fully completed stages may be used during the presale for development, infrastructure,

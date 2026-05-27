@@ -49,8 +49,8 @@ contract SkipPresale is Ownable, Pausable, ReentrancyGuard {
     uint256 public constant STAGE_TOKEN_CAP = 20_000_000_000 * 1e18;
     uint256 public constant DEVELOPMENT_BPS = 2_500;
     uint256 public constant BPS_DENOMINATOR = 10_000;
-    uint256 public constant IMMEDIATE_CLAIM_BPS = 5_000;
-    uint256 public constant BUYER_VESTING_DURATION = 90 days;
+    uint256 public constant IMMEDIATE_CLAIM_BPS = 2_000;
+    uint256 public constant BUYER_VESTING_DURATION = 180 days;
     uint256 private constant MAX_PRICE_DUST_USDC = 38;
 
     Stage[] private stages;
@@ -330,11 +330,11 @@ contract SkipPresale is Ownable, Pausable, ReentrancyGuard {
 
         uint256 totalPurchased = purchased[user];
         uint256 immediate = (totalPurchased * IMMEDIATE_CLAIM_BPS) / BPS_DENOMINATOR;
-        uint256 vestedHalf = totalPurchased - immediate;
+        uint256 linearVestingAmount = totalPurchased - immediate;
         uint256 elapsed = block.timestamp > vestingStart ? block.timestamp - vestingStart : 0;
         uint256 vested = elapsed >= BUYER_VESTING_DURATION
-            ? vestedHalf
-            : (vestedHalf * elapsed) / BUYER_VESTING_DURATION;
+            ? linearVestingAmount
+            : (linearVestingAmount * elapsed) / BUYER_VESTING_DURATION;
         uint256 unlocked = immediate + vested;
 
         if (unlocked <= claimed[user]) {

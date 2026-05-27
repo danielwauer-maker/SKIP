@@ -1,25 +1,18 @@
-import { Hero } from "../components/hero";
-import { PresaleCard } from "../components/presale-card";
-import { SecuritySection } from "../components/security-section";
-import { TokenomicsSection } from "../components/tokenomics-section";
-import { TransparencySection } from "../components/transparency-section";
-import { TrustSection } from "../components/trust-section";
-import { WhySkipSection } from "../components/why-skip-section";
-import { RoadmapSection } from "../components/roadmap-section";
-import { FaqSection } from "../components/faq-section";
+import type { Metadata } from "next";
+import { LandingPage } from "../components/landing-page";
+
+export const metadata: Metadata = {
+  title: "SKIP \u2014 Stop Wasting Your Life Waiting",
+  description:
+    "SKIP is building a community-driven real-world activity intelligence ecosystem to help people make smarter everyday decisions.",
+  openGraph: {
+    title: "SKIP \u2014 Stop Wasting Your Life Waiting",
+    description:
+      "SKIP is building a community-driven real-world activity intelligence ecosystem to help people make smarter everyday decisions.",
+    images: ["/og-image.png"]
+  }
+};
 
 export default function Home() {
-  return (
-    <main>
-      <Hero />
-      <PresaleCard />
-      <WhySkipSection />
-      <TrustSection />
-      <SecuritySection />
-      <TransparencySection />
-      <TokenomicsSection />
-      <RoadmapSection />
-      <FaqSection />
-    </main>
-  );
+  return <LandingPage />;
 }

@@ -37,6 +37,11 @@
   },
   {
     "inputs": [],
+    "name": "AlreadyFinalized",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "AlreadyRefunded",
     "type": "error"
   },

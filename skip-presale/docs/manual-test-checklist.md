@@ -47,8 +47,8 @@
 
 ## 10. Buyer Vesting
 
-- [ ] Goal: Successful finalize claim. Steps: Reach softcap, finalize, open dashboard. Expected: 50% claimable immediately.
-- [ ] Goal: Linear vesting. Steps: Advance 45 and 90 days locally. Expected: 75% then 100% total purchased becomes claimable/claimed.
+- [ ] Goal: Successful finalize claim. Steps: Reach softcap, finalize, open dashboard. Expected: immediate claimable amount matches `IMMEDIATE_CLAIM_BPS`.
+- [ ] Goal: Linear vesting. Steps: Advance to the midpoint and end of `BUYER_VESTING_DURATION` locally. Expected: midpoint and final claimable amounts match the contract schedule.
 
 ## 11. Team Vesting
 

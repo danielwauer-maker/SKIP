@@ -18,7 +18,7 @@ Keep the remaining presale allocation strategy documented before mainnet deploym
 
 ## Vesting
 
-Presale buyers can claim 50% of purchased SKIP after successful finalization. The remaining 50% unlocks linearly over 90 days from finalization.
+Presale buyer vesting is contract-driven. The immediate unlock comes from `IMMEDIATE_CLAIM_BPS`, and the linear vesting period comes from `BUYER_VESTING_DURATION` on the deployed presale contract.
 
 Team allocation should be deposited into `SkipTeamVesting.sol`. The contract uses a 12 month cliff followed by 24 months of linear vesting. It releases already deposited tokens only and has no minting capability.
 

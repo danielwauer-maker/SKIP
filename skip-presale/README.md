@@ -29,12 +29,25 @@ cp apps/web/.env.example apps/web/.env.local
 Set `PRIVATE_KEY`, `POLYGON_AMOY_RPC_URL`, `POLYGONSCAN_API_KEY`, and optionally `USDC_ADDRESS`.
 For the web app, set deployed contract addresses and `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`.
 
+### Landing Page Community Links
+
+The root landing page uses public environment variables for its community CTAs:
+
+```bash
+NEXT_PUBLIC_DISCORD_URL="https://discord.gg/your-invite"
+NEXT_PUBLIC_X_URL="https://x.com/your-handle"
+```
+
+The homepage waitlist posts to `apps/web/app/api/waitlist/route.ts`. It validates email addresses and returns a success
+response for the current early-access flow. Before production launch, connect that route to a database, CRM, or email
+platform so waitlist submissions are persisted.
+
 ## Presale Mechanics
 
 - Hardcap: 3,720,000 USDC, equal to the exact sum of all 12 stage raises.
 - Development treasury withdrawals are stage-based: only 25% of USDC attributed to fully completed stages can be withdrawn during the presale.
 - Partially sold stages do not unlock development funds.
-- Buyer vesting releases 50% of purchased SKIP after successful finalize and the remaining 50% linearly over 90 days.
+- Buyer vesting is contract-driven through `IMMEDIATE_CLAIM_BPS` and `BUYER_VESTING_DURATION`, with UI displays reading those values from the deployed presale contract.
 - Team vesting uses `SkipTeamVesting.sol` with a 12 month cliff and 24 months of linear vesting.
 - Staking is not part of Phase 1.
 

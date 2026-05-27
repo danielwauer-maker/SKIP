@@ -5,7 +5,7 @@ import { Loader2 } from "lucide-react";
 import { decodeEventLog, type Abi } from "viem";
 import { useAccount, useChainId, useReadContracts, useWaitForTransactionReceipt, useWatchContractEvent, useWriteContract } from "wagmi";
 import { abis, contracts, hasConfiguredContracts } from "../config/contracts";
-import { compactAddress, formatSkip, formatUsdc } from "../lib/format";
+import { compactAddress, formatBpsToPercent, formatDurationDays, formatSkip, formatUsdc } from "../lib/format";
 import { WalletConnectButton } from "./wallet-connect-button";
 
 type UserInfoTuple = readonly [bigint, bigint, bigint, bigint, boolean];
@@ -91,6 +91,24 @@ export function UserDashboard() {
               chainId,
               functionName: "claimedAmount",
               args: [address]
+            },
+            {
+              address: contracts.skipPresale,
+              abi: abis.skipPresale as Abi,
+              chainId,
+              functionName: "IMMEDIATE_CLAIM_BPS"
+            },
+            {
+              address: contracts.skipPresale,
+              abi: abis.skipPresale as Abi,
+              chainId,
+              functionName: "BUYER_VESTING_DURATION"
+            },
+            {
+              address: contracts.skipPresale,
+              abi: abis.skipPresale as Abi,
+              chainId,
+              functionName: "vestingStart"
             }
           ]
         : [],
@@ -164,6 +182,10 @@ export function UserDashboard() {
   const user = normalizeUserInfo(dashboardData?.[0]?.result as UserInfoTuple | UserInfoObject | undefined);
   const info = normalizePresaleInfo(dashboardData?.[1]?.result as PresaleInfoTuple | PresaleInfoObject | undefined);
   const claimed = dashboardData?.[2]?.result as bigint | undefined;
+  const immediateClaimBps = dashboardData?.[3]?.result as bigint | undefined;
+  const vestingDuration = dashboardData?.[4]?.result as bigint | undefined;
+  const vestingStart = dashboardData?.[5]?.result as bigint | undefined;
+  const linearClaimBps = immediateClaimBps === undefined ? undefined : 10_000n - immediateClaimBps;
   const vestingProgress =
     user.purchased > BigInt(0)
       ? Math.min(100, Number(((claimed ?? BigInt(0)) * BigInt(10000)) / user.purchased) / 100)
@@ -211,12 +233,14 @@ export function UserDashboard() {
           <Metric label="Refundable USDC" value={`${formatUsdc(user.refundable)} USDC`} />
           <Metric label="Presale status" value={status} />
           <Metric label="Vesting progress" value={`${vestingProgress.toFixed(1)}% claimed`} />
+          <Metric label="Vesting start" value={formatDate(vestingStart)} />
           <Metric label="Next claim" value={user.claimable > BigInt(0) ? "Available now" : "Unlocks linearly after finalize"} />
         </div>
 
         <p className="mt-5 rounded-md border border-line bg-black/30 p-4 text-sm leading-6 text-slate-300">
-          Buyer vesting: 50% is claimable after successful presale finalization. The remaining 50% unlocks linearly over
-          90 days from finalize. Multiple claims are supported.
+          Buyer vesting: {formatBpsToPercent(immediateClaimBps)} is claimable after successful presale finalization. The
+          remaining {formatBpsToPercent(linearClaimBps)} unlocks linearly over {formatDurationDays(vestingDuration)}
+          from finalize. Multiple claims are supported.
         </p>
 
         {hash ? <p className="mt-5 break-all text-sm text-neon">Transaction: {hash}</p> : null}
@@ -237,6 +261,17 @@ export function UserDashboard() {
           >
             {isPending || isConfirming ? <Loader2 className="mx-auto animate-spin" /> : "Refund USDC"}
           </button>
+        </div>
+
+        <div className="mt-5 grid gap-3 text-sm leading-6 text-slate-300 md:grid-cols-2">
+          <div className="rounded-md border border-line bg-black/30 p-4">
+            Claims are available only after a successful finalize. The dashboard reads your claimable amount from the
+            presale contract.
+          </div>
+          <div className="rounded-md border border-line bg-black/30 p-4">
+            Refunds are available only if the softcap is not reached and refund mode is enabled with enough USDC
+            liquidity in the contract.
+          </div>
         </div>
       </div>
 
@@ -329,6 +364,11 @@ function normalizePresaleInfo(info?: PresaleInfoTuple | PresaleInfoObject): Pres
 
 function compactHash(hash: string) {
   return `${hash.slice(0, 10)}...${hash.slice(-8)}`;
+}
+
+function formatDate(timestamp?: bigint) {
+  if (!timestamp || timestamp === 0n) return "Not active";
+  return new Date(Number(timestamp) * 1000).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

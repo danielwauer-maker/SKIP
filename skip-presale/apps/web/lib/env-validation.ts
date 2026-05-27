@@ -1,5 +1,6 @@
 import { targetChainId } from "../config/chains";
 import { contracts, hasConfiguredContracts } from "../config/contracts";
+import { mainnetBlockers } from "./launch-status";
 
 const zeroAddress = "0x0000000000000000000000000000000000000000";
 const dummyWalletConnectProjectId = "00000000000000000000000000000000";
@@ -16,8 +17,8 @@ export function getPublicEnvWarnings(context: "presale" | "admin" = "presale") {
     warnings.push("WalletConnect Project ID is missing or still using the dummy value for a non-local chain.");
   }
   if (targetChainId === 137 && contracts.usdc === zeroAddress) warnings.push("Mainnet USDC address is not configured.");
-  if (targetChainId === 137 && adminEnabled) warnings.push("Admin is enabled on a mainnet target; frontend guard is not real authentication.");
-  if (context === "admin" && adminEnabled) warnings.push("Admin dashboard uses a frontend guard only. Add real auth before public deployment.");
+  if (targetChainId === 137 && adminEnabled) warnings.push("Admin is enabled on a mainnet target; Admin Auth V1 still needs production hardening.");
+  if (context === "admin" && adminEnabled) warnings.push("Admin dashboard uses password-session Auth V1. Add rate limiting and audit logs before production.");
   if (!referralsEnabled) warnings.push("Referrals are disabled through NEXT_PUBLIC_ENABLE_REFERRALS=false.");
 
   return warnings;
@@ -56,12 +57,6 @@ export function getServerSecurityStatus() {
       { label: "Contract addresses configured", ok: hasConfiguredContracts() },
       { label: "WalletConnect configured for non-local chain", ok: targetChainId === 31337 || Boolean(process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID) }
     ],
-    mainnetBlockers: [
-      "External smart contract audit",
-      "Owner multisig or timelock",
-      "Legal and eligibility review",
-      "PostgreSQL production database",
-      "Monitoring and alerting"
-    ]
+    mainnetBlockers: [...mainnetBlockers]
   };
 }

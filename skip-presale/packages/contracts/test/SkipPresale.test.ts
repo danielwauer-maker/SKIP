@@ -1,13 +1,15 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import { ethers, network } from "hardhat";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
+import type { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
+import type { SkipPresale } from "../typechain-types";
 
 const USDC = (value: string) => ethers.parseUnits(value, 6);
 const SKIP = (value: string) => ethers.parseUnits(value, 18);
 const PRESALE_ALLOCATION = SKIP("240000000000");
 const FULL_STAGE_RAISE = USDC("3720000");
 const SOFTCAP_WITH_DUST_BUFFER = USDC("250000") + 1n;
-const DAY = 24 * 60 * 60;
+const DAY = 24n * 60n * 60n;
 const STAGE_PRICES = [4n, 5n, 6n, 8n, 9n, 11n, 13n, 16n, 20n, 25n, 31n, 38n] as const;
 const STAGE_RAISES = [
   USDC("80000"),
@@ -23,6 +25,39 @@ const STAGE_RAISES = [
   USDC("620000"),
   USDC("760000")
 ] as const;
+
+function expectedBuyerUnlocked(purchasedAmount: bigint, elapsed: bigint) {
+  const immediateAmount = (purchasedAmount * 20n) / 100n;
+  const linearAmount = purchasedAmount - immediateAmount;
+  const duration = 180n * DAY;
+  return immediateAmount + (elapsed >= duration ? linearAmount : (linearAmount * elapsed) / duration);
+}
+
+async function claimAndExpectClaimed(
+  presale: SkipPresale,
+  buyer: HardhatEthersSigner,
+  purchasedAmount: bigint,
+  vestingStart: bigint
+) {
+  const tx = await presale.connect(buyer).claim();
+  const receipt = await tx.wait();
+  if (!receipt) throw new Error("Missing claim transaction receipt.");
+  const block = await ethers.provider.getBlock(receipt.blockNumber);
+  const elapsed = BigInt(block?.timestamp ?? 0) - vestingStart;
+  expect(await presale.claimedAmount(buyer.address)).to.equal(expectedBuyerUnlocked(purchasedAmount, elapsed));
+}
+
+async function setClaimedStorage(presale: SkipPresale, user: string, amount: bigint) {
+  const encodedAmount = ethers.toBeHex(amount, 32);
+  for (let slot = 0n; slot < 16n; slot++) {
+    const snapshot = await network.provider.send("evm_snapshot");
+    const storageSlot = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(["address", "uint256"], [user, slot]));
+    await network.provider.send("hardhat_setStorageAt", [await presale.getAddress(), storageSlot, encodedAmount]);
+    if ((await presale.claimed(user)) === amount) return;
+    await network.provider.send("evm_revert", [snapshot]);
+  }
+  throw new Error("Could not locate claimed mapping storage slot.");
+}
 
 async function deployFixture(offsetStart = -10, duration = 30 * 24 * 60 * 60) {
   const [owner, buyer, buyer2, treasury] = await ethers.getSigners();
@@ -185,11 +220,60 @@ describe("SkipPresale", function () {
     await expect(presale.connect(buyer).buy(USDC("10"))).to.emit(presale, "TokensPurchased");
   });
 
+  it("blocks non-owner admin actions", async function () {
+    const { buyer, treasury, presale } = await deployFixture();
+
+    await expect(presale.connect(buyer).pause())
+      .to.be.revertedWithCustomError(presale, "OwnableUnauthorizedAccount")
+      .withArgs(buyer.address);
+    await expect(presale.connect(buyer).unpause())
+      .to.be.revertedWithCustomError(presale, "OwnableUnauthorizedAccount")
+      .withArgs(buyer.address);
+    await expect(presale.connect(buyer).finalize())
+      .to.be.revertedWithCustomError(presale, "OwnableUnauthorizedAccount")
+      .withArgs(buyer.address);
+    await expect(presale.connect(buyer).withdrawDevelopmentFunds(treasury.address))
+      .to.be.revertedWithCustomError(presale, "OwnableUnauthorizedAccount")
+      .withArgs(buyer.address);
+    await expect(presale.connect(buyer).withdrawRemainingFunds(treasury.address))
+      .to.be.revertedWithCustomError(presale, "OwnableUnauthorizedAccount")
+      .withArgs(buyer.address);
+    await expect(presale.connect(buyer).withdrawUnsoldTokens(treasury.address))
+      .to.be.revertedWithCustomError(presale, "OwnableUnauthorizedAccount")
+      .withArgs(buyer.address);
+  });
+
+  it("allows transferred owner to operate admin controls", async function () {
+    const { owner, buyer, buyer2, presale } = await deployFixture();
+
+    await presale.connect(owner).transferOwnership(buyer2.address);
+    await expect(presale.connect(owner).pause())
+      .to.be.revertedWithCustomError(presale, "OwnableUnauthorizedAccount")
+      .withArgs(owner.address);
+
+    await presale.connect(buyer2).pause();
+    await expect(presale.connect(buyer).buy(USDC("10"))).to.be.revertedWithCustomError(presale, "EnforcedPause");
+    await presale.connect(buyer2).unpause();
+    await expect(presale.connect(buyer).buy(USDC("10"))).to.emit(presale, "TokensPurchased");
+  });
+
   it("blocks finalize before end unless the hardcap is reached", async function () {
     const { owner, buyer, presale } = await deployFixture();
 
     await expect(presale.connect(owner).finalize()).to.be.revertedWithCustomError(presale, "PresaleStillActive");
     await presale.connect(buyer).buy(FULL_STAGE_RAISE);
+    await expect(presale.connect(owner).finalize()).to.emit(presale, "Finalized").withArgs(true, false);
+  });
+
+  it("keeps finalize blocked at exact endTime and allows it after endTime", async function () {
+    const { owner, buyer, presale, end } = await deployFixture();
+
+    await presale.connect(buyer).buy(SOFTCAP_WITH_DUST_BUFFER);
+    await time.increaseTo(end - 1);
+    await time.setNextBlockTimestamp(end);
+    await expect(presale.connect(owner).finalize()).to.be.revertedWithCustomError(presale, "PresaleStillActive");
+
+    await time.setNextBlockTimestamp(end + 1);
     await expect(presale.connect(owner).finalize()).to.emit(presale, "Finalized").withArgs(true, false);
   });
 
@@ -202,10 +286,11 @@ describe("SkipPresale", function () {
     await time.increaseTo(end + 1);
     await presale.connect(owner).finalize();
     const purchasedAmount = (await presale.getUserInfo(buyer.address)).purchased;
+    const immediateClaimBps = await presale.IMMEDIATE_CLAIM_BPS();
     const amountToClaim = await presale.claimable(buyer.address);
     await expect(presale.connect(buyer).claim()).to.emit(presale, "Claimed");
-    expect(amountToClaim).to.equal(purchasedAmount / 2n);
-    expect(await skip.balanceOf(buyer.address)).to.be.gte(purchasedAmount / 2n);
+    expect(amountToClaim).to.equal((purchasedAmount * immediateClaimBps) / 10_000n);
+    expect(await skip.balanceOf(buyer.address)).to.be.gte((purchasedAmount * immediateClaimBps) / 10_000n);
     expect(await skip.balanceOf(buyer.address)).to.be.lte(purchasedAmount);
   });
 
@@ -284,6 +369,25 @@ describe("SkipPresale", function () {
     await expect(presale.connect(buyer).refund()).to.emit(presale, "Refunded");
   });
 
+  it("keeps refunds disabled after partial development repayment until liquidity is fully restored", async function () {
+    const { owner, buyer, treasury, usdc, presale, end } = await deployFixture();
+
+    await presale.connect(buyer).buy(USDC("80000"));
+    await presale.connect(owner).withdrawDevelopmentFunds(treasury.address);
+    await time.increaseTo(end + 1);
+    await presale.connect(owner).finalize();
+    expect((await presale.getPresaleInfo()).refundEnabled).to.equal(false);
+
+    await usdc.connect(treasury).approve(await presale.getAddress(), USDC("20000"));
+    await presale.connect(treasury).repayDevelopmentFunds(USDC("10000"));
+    expect((await presale.getPresaleInfo()).refundEnabled).to.equal(false);
+    await expect(presale.connect(buyer).refund()).to.be.revertedWithCustomError(presale, "RefundNotEnabled");
+
+    await presale.connect(treasury).repayDevelopmentFunds(USDC("10000"));
+    expect((await presale.getPresaleInfo()).refundEnabled).to.equal(true);
+    await expect(presale.connect(buyer).refund()).to.emit(presale, "Refunded").withArgs(buyer.address, USDC("80000"));
+  });
+
   it("reaches allStagesSoldOut and finalizes before end without contradicting the hardcap", async function () {
     const { owner, buyer, presale } = await deployFixture();
 
@@ -325,7 +429,67 @@ describe("SkipPresale", function () {
     await expect(presale.connect(owner).finalize()).to.be.revertedWithCustomError(presale, "AlreadyFinalized");
   });
 
-  it("vests buyer claims: 50 percent immediately, 75 percent after 45 days, 100 percent after 90 days", async function () {
+  it("vests buyer claims according to contract-configured immediate unlock and linear duration", async function () {
+    const { owner, buyer, skip, presale, end } = await deployFixture();
+
+    await presale.connect(buyer).buy(SOFTCAP_WITH_DUST_BUFFER);
+    const purchasedAmount = (await presale.getUserInfo(buyer.address)).purchased;
+    const immediateClaimBps = await presale.IMMEDIATE_CLAIM_BPS();
+    const vestingDuration = await presale.BUYER_VESTING_DURATION();
+    const immediateAmount = (purchasedAmount * immediateClaimBps) / 10_000n;
+    const linearAmount = purchasedAmount - immediateAmount;
+    await time.increaseTo(end + 1);
+    await presale.connect(owner).finalize();
+    const vestingStart = await presale.vestingStart();
+
+    expect(await presale.claimable(buyer.address)).to.equal(immediateAmount);
+    await expect(presale.connect(buyer).claim()).to.emit(presale, "Claimed");
+    expect(await presale.claimedAmount(buyer.address)).to.be.closeTo(immediateAmount, SKIP("100000"));
+
+    await time.increaseTo(vestingStart + (vestingDuration / 2n));
+    const expectedAtMidpoint = immediateAmount + linearAmount / 2n;
+    expect(await presale.claimable(buyer.address)).to.be.closeTo(expectedAtMidpoint - (await presale.claimedAmount(buyer.address)), SKIP("100000"));
+    await presale.connect(buyer).claim();
+    expect(await presale.claimedAmount(buyer.address)).to.be.closeTo(expectedAtMidpoint, SKIP("100000"));
+
+    await time.increaseTo(vestingStart + vestingDuration);
+    expect(await presale.claimable(buyer.address)).to.equal(purchasedAmount - (await presale.claimedAmount(buyer.address)));
+    await presale.connect(buyer).claim();
+    expect(await presale.claimedAmount(buyer.address)).to.equal(purchasedAmount);
+    expect(await skip.balanceOf(buyer.address)).to.equal(purchasedAmount);
+    await expect(presale.connect(buyer).claim()).to.be.revertedWithCustomError(presale, "NothingToClaim");
+  });
+
+  it("uses the 20 percent immediate and 80 percent over 180 days buyer vesting schedule", async function () {
+    const { owner, buyer, presale, end } = await deployFixture();
+
+    expect(await presale.IMMEDIATE_CLAIM_BPS()).to.equal(2_000n);
+    expect(await presale.BUYER_VESTING_DURATION()).to.equal(180n * DAY);
+
+    await presale.connect(buyer).buy(SOFTCAP_WITH_DUST_BUFFER);
+    const purchasedAmount = (await presale.getUserInfo(buyer.address)).purchased;
+    await time.increaseTo(end + 1);
+    await presale.connect(owner).finalize();
+    const vestingStart = await presale.vestingStart();
+
+    expect(await presale.claimable(buyer.address)).to.equal(expectedBuyerUnlocked(purchasedAmount, 0n));
+
+    await time.increaseTo(vestingStart + 45n * DAY);
+    expect(await presale.claimable(buyer.address)).to.be.closeTo((purchasedAmount * 40n) / 100n, 1n);
+    expect(await presale.claimable(buyer.address)).to.equal(expectedBuyerUnlocked(purchasedAmount, 45n * DAY));
+
+    await time.increaseTo(vestingStart + 90n * DAY);
+    expect(await presale.claimable(buyer.address)).to.be.closeTo((purchasedAmount * 60n) / 100n, 1n);
+    expect(await presale.claimable(buyer.address)).to.equal(expectedBuyerUnlocked(purchasedAmount, 90n * DAY));
+
+    await time.increaseTo(vestingStart + 180n * DAY);
+    expect(await presale.claimable(buyer.address)).to.equal(purchasedAmount);
+
+    await time.increaseTo(vestingStart + 181n * DAY);
+    expect(await presale.claimable(buyer.address)).to.equal(purchasedAmount);
+  });
+
+  it("supports multiple partial buyer claims without overclaiming", async function () {
     const { owner, buyer, skip, presale, end } = await deployFixture();
 
     await presale.connect(buyer).buy(SOFTCAP_WITH_DUST_BUFFER);
@@ -334,22 +498,59 @@ describe("SkipPresale", function () {
     await presale.connect(owner).finalize();
     const vestingStart = await presale.vestingStart();
 
-    expect(await presale.claimable(buyer.address)).to.equal(purchasedAmount / 2n);
-    await expect(presale.connect(buyer).claim()).to.emit(presale, "Claimed");
-    expect(await presale.claimedAmount(buyer.address)).to.be.closeTo(purchasedAmount / 2n, SKIP("100000"));
+    await claimAndExpectClaimed(presale, buyer, purchasedAmount, vestingStart);
+    expect(await presale.claimable(buyer.address)).to.equal(0n);
 
-    await time.increaseTo(vestingStart + BigInt(45 * DAY));
-    const expectedAt45 = (purchasedAmount * 75n) / 100n;
-    expect(await presale.claimable(buyer.address)).to.be.closeTo(expectedAt45 - (await presale.claimedAmount(buyer.address)), SKIP("100000"));
-    await presale.connect(buyer).claim();
-    expect(await presale.claimedAmount(buyer.address)).to.be.closeTo(expectedAt45, SKIP("100000"));
+    await time.increaseTo(vestingStart + 45n * DAY);
+    const claimedBefore45 = await presale.claimedAmount(buyer.address);
+    const claimableBefore45 = await presale.claimable(buyer.address);
+    await claimAndExpectClaimed(presale, buyer, purchasedAmount, vestingStart);
+    expect(await presale.claimedAmount(buyer.address)).to.be.closeTo((purchasedAmount * 40n) / 100n, SKIP("100000"));
+    expect(claimableBefore45).to.equal(expectedBuyerUnlocked(purchasedAmount, 45n * DAY) - claimedBefore45);
 
-    await time.increaseTo(vestingStart + BigInt(90 * DAY));
-    expect(await presale.claimable(buyer.address)).to.equal(purchasedAmount - (await presale.claimedAmount(buyer.address)));
+    await time.increaseTo(vestingStart + 90n * DAY);
+    const claimedBefore90 = await presale.claimedAmount(buyer.address);
+    const claimableBefore90 = await presale.claimable(buyer.address);
+    await claimAndExpectClaimed(presale, buyer, purchasedAmount, vestingStart);
+    expect(await presale.claimedAmount(buyer.address)).to.be.closeTo((purchasedAmount * 60n) / 100n, SKIP("100000"));
+    expect(claimableBefore90).to.equal(expectedBuyerUnlocked(purchasedAmount, 90n * DAY) - claimedBefore90);
+
+    await time.increaseTo(vestingStart + 180n * DAY);
     await presale.connect(buyer).claim();
     expect(await presale.claimedAmount(buyer.address)).to.equal(purchasedAmount);
     expect(await skip.balanceOf(buyer.address)).to.equal(purchasedAmount);
     await expect(presale.connect(buyer).claim()).to.be.revertedWithCustomError(presale, "NothingToClaim");
+  });
+
+  it("handles small buyer vesting amounts without permanent rounding loss", async function () {
+    const { owner, buyer, buyer2, presale, end } = await deployFixture();
+
+    await presale.connect(buyer).buy(SOFTCAP_WITH_DUST_BUFFER);
+    await presale.connect(buyer2).buy(1n);
+    const purchasedAmount = (await presale.getUserInfo(buyer2.address)).purchased;
+    await time.increaseTo(end + 1);
+    await presale.connect(owner).finalize();
+    const vestingStart = await presale.vestingStart();
+
+    expect(await presale.claimable(buyer2.address)).to.equal((purchasedAmount * 20n) / 100n);
+
+    await time.increaseTo(vestingStart + 180n * DAY);
+    await presale.connect(buyer2).claim();
+    expect(await presale.claimedAmount(buyer2.address)).to.equal(purchasedAmount);
+  });
+
+  it("returns zero claimable when already claimed exceeds the current vested amount", async function () {
+    const { owner, buyer, presale, end } = await deployFixture();
+
+    await presale.connect(buyer).buy(SOFTCAP_WITH_DUST_BUFFER);
+    const purchasedAmount = (await presale.getUserInfo(buyer.address)).purchased;
+    await time.increaseTo(end + 1);
+    await presale.connect(owner).finalize();
+
+    const currentUnlocked = (purchasedAmount * 20n) / 100n;
+    await setClaimedStorage(presale, buyer.address, currentUnlocked + 1n);
+
+    expect(await presale.claimable(buyer.address)).to.equal(0n);
   });
 
   it("claim is blocked before finalize and during refund mode", async function () {
@@ -394,5 +595,30 @@ describe("SkipPresale", function () {
       "UnsoldTokensWithdrawn"
     );
     expect(await skip.balanceOf(await presale.getAddress())).to.equal(purchasedAmount);
+  });
+
+  it("preserves future buyer claims when unsold tokens are withdrawn after partial claims", async function () {
+    const { owner, buyer, treasury, skip, presale, end } = await deployFixture();
+
+    await presale.connect(buyer).buy(SOFTCAP_WITH_DUST_BUFFER);
+    const purchasedAmount = (await presale.getUserInfo(buyer.address)).purchased;
+    await time.increaseTo(end + 1);
+    await presale.connect(owner).finalize();
+
+    await presale.connect(buyer).claim();
+    const claimedAfterImmediate = await presale.claimedAmount(buyer.address);
+    await time.increaseTo((await presale.vestingStart()) + 90n * DAY);
+    await presale.connect(buyer).claim();
+    const claimedAfterMidpoint = await presale.claimedAmount(buyer.address);
+    expect(claimedAfterMidpoint).to.be.gt(claimedAfterImmediate);
+
+    await presale.connect(owner).withdrawUnsoldTokens(treasury.address);
+    expect(await skip.balanceOf(await presale.getAddress())).to.equal(purchasedAmount - claimedAfterMidpoint);
+
+    await time.increaseTo((await presale.vestingStart()) + 180n * DAY);
+    await presale.connect(buyer).claim();
+    expect(await presale.claimedAmount(buyer.address)).to.equal(purchasedAmount);
+    expect(await skip.balanceOf(buyer.address)).to.equal(purchasedAmount);
+    expect(await skip.balanceOf(await presale.getAddress())).to.equal(0n);
   });
 });

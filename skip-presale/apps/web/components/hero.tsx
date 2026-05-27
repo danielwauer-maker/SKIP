@@ -13,7 +13,7 @@ export function Hero() {
             Transparency-focused crypto project with planned app utility
           </div>
           <h1 className="neon-text max-w-4xl text-5xl font-black tracking-normal text-white sm:text-6xl lg:text-7xl">
-            $SKIP — Stop wasting time.
+            $SKIP - Stop wasting time.
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300">
             The community token for people who are done wasting life in queues, traffic, waiting rooms and broken

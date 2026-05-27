@@ -24,3 +24,18 @@ export function percent(numerator?: bigint, denominator?: bigint) {
   if (!numerator || !denominator || denominator === BigInt(0)) return 0;
   return Math.min(100, Number((numerator * BigInt(10000)) / denominator) / 100);
 }
+
+export function formatBpsToPercent(value?: bigint) {
+  if (value === undefined) return "Contract-defined";
+  const whole = value / 100n;
+  const fraction = value % 100n;
+  if (fraction === 0n) return `${whole.toString()}%`;
+  return `${whole.toString()}.${fraction.toString().padStart(2, "0").replace(/0+$/, "")}%`;
+}
+
+export function formatDurationDays(value?: bigint) {
+  if (value === undefined) return "Contract-defined";
+  const day = 24n * 60n * 60n;
+  if (value % day === 0n) return `${(value / day).toString()} days`;
+  return `${value.toString()} seconds`;
+}

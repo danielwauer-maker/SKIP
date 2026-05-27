@@ -3,8 +3,8 @@ import type { RankInfo } from "../types/referral";
 export const ranks: RankInfo[] = [
   { name: "Visitor", minXp: 0, badgeClass: "border-slate-500/40 bg-slate-500/10 text-slate-200" },
   { name: "Starter", minXp: 100, badgeClass: "border-neon/40 bg-neon/10 text-neon" },
-  { name: "Scout", minXp: 500, badgeClass: "border-cyan-300/40 bg-cyan-300/10 text-cyan-100" },
-  { name: "Builder", minXp: 1500, badgeClass: "border-lime-300/40 bg-lime-300/10 text-lime-100" },
+  { name: "Scout", minXp: 500, badgeClass: "border-orange-300/40 bg-orange-300/10 text-orange-100" },
+  { name: "Builder", minXp: 1500, badgeClass: "border-white/30 bg-white/10 text-white" },
   { name: "Founder", minXp: 5000, badgeClass: "border-amber-300/40 bg-amber-300/10 text-amber-100" },
   { name: "Genesis Founder", minXp: 10000, badgeClass: "border-fuchsia-300/40 bg-fuchsia-300/10 text-fuchsia-100" },
   { name: "Vanguard", minXp: 25000, badgeClass: "border-white/50 bg-white/10 text-white" }

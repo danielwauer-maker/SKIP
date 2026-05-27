@@ -75,4 +75,25 @@ describe("SkipTeamVesting", function () {
       "ZeroAddress"
     );
   });
+
+  it("blocks non-owner beneficiary updates", async function () {
+    const { beneficiary, nextBeneficiary, vesting } = await deployFixture();
+
+    await expect(vesting.connect(beneficiary).updateBeneficiary(nextBeneficiary.address))
+      .to.be.revertedWithCustomError(vesting, "OwnableUnauthorizedAccount")
+      .withArgs(beneficiary.address);
+  });
+
+  it("allows transferred owner to manage beneficiary", async function () {
+    const { owner, beneficiary, nextBeneficiary, vesting } = await deployFixture();
+
+    await vesting.connect(owner).transferOwnership(nextBeneficiary.address);
+    await expect(vesting.connect(owner).updateBeneficiary(owner.address))
+      .to.be.revertedWithCustomError(vesting, "OwnableUnauthorizedAccount")
+      .withArgs(owner.address);
+
+    await expect(vesting.connect(nextBeneficiary).updateBeneficiary(beneficiary.address))
+      .to.emit(vesting, "BeneficiaryUpdated")
+      .withArgs(beneficiary.address, beneficiary.address);
+  });
 });

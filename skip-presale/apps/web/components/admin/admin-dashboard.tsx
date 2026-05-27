@@ -79,6 +79,9 @@ export function AdminDashboard({ securityStatus }: { securityStatus: SecuritySta
   const allStagesSoldOut = data?.[1]?.result as boolean | undefined;
   const paused = data?.[2]?.result as boolean | undefined;
   const owner = data?.[3]?.result as string | undefined;
+  const buyerVestingStart = data?.[4]?.result as bigint | undefined;
+  const buyerVestingDuration = data?.[5]?.result as bigint | undefined;
+  const buyerImmediateClaimBps = data?.[6]?.result as bigint | undefined;
   const tokenTotalSupply = data?.[7]?.result as bigint | undefined;
   const presaleTokenBalance = data?.[8]?.result as bigint | undefined;
   const contractUsdcBalance = data?.[9]?.result as bigint | undefined;
@@ -148,7 +151,8 @@ export function AdminDashboard({ securityStatus }: { securityStatus: SecuritySta
   return (
     <main className="mx-auto max-w-[1600px] px-4 py-8">
       <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
-        Admin dashboard is not protected yet. Do not deploy publicly without authentication. Frontend guard only. Real auth required before public deployment.
+        Admin V1 uses a server-side password session. This is acceptable for controlled testnet operations, but mainnet
+        still requires stronger auth, rate limiting and audit logs.
       </div>
       {envWarnings.length ? (
         <div className="mt-4 rounded-lg border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
@@ -243,6 +247,11 @@ export function AdminDashboard({ securityStatus }: { securityStatus: SecuritySta
         {activeTab === "Vesting" ? (
           <AdminVestingPanel
             presale={presale}
+            buyerVesting={{
+              start: buyerVestingStart,
+              duration: buyerVestingDuration,
+              immediateClaimBps: buyerImmediateClaimBps
+            }}
             totalPurchased={presale.totalSold}
             totalClaimed={buyers.reduce((sum, buyer) => sum + buyer.claimed, 0n)}
             team={{

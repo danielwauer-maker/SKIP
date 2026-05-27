@@ -11,7 +11,7 @@
 - Transfer the intended team allocation to the vesting contract.
 - Validate ABI export after deployment.
 - Validate completed-stage treasury unlock math on testnet.
-- Validate buyer vesting claims at finalize, day 45 and day 90.
+- Validate buyer vesting claims at finalize, midpoint of `BUYER_VESTING_DURATION` and full `BUYER_VESTING_DURATION`.
 - Confirm risk warnings on every page.
 - Run security review before mainnet.
 - Run legal review before any public launch.

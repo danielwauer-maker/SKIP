@@ -13,7 +13,7 @@ export default async function AdminPage() {
             Set <code>NEXT_PUBLIC_ENABLE_ADMIN=true</code> locally to enable the Founder Control Center.
           </p>
           <p className="mt-4 rounded border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">
-            Frontend guard only. Real auth required before public deployment.
+            Admin V1 requires a server-side password session when enabled. Production still needs rate limiting and audit logs.
           </p>
         </div>
       </main>

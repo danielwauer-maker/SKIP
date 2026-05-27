@@ -19,4 +19,18 @@ describe("SkipToken", function () {
 
     expect((token.interface as unknown as { hasFunction(name: string): boolean }).hasFunction("mint")).to.equal(false);
   });
+
+  it("supports ownership transfer without changing fixed supply", async function () {
+    const [owner, nextOwner] = await ethers.getSigners();
+    const token = await ethers.deployContract("SkipToken", [owner.address]);
+    const supplyBefore = await token.totalSupply();
+
+    await expect(token.connect(owner).transferOwnership(nextOwner.address))
+      .to.emit(token, "OwnershipTransferred")
+      .withArgs(owner.address, nextOwner.address);
+
+    expect(await token.owner()).to.equal(nextOwner.address);
+    expect(await token.totalSupply()).to.equal(supplyBefore);
+    expect((token.interface as unknown as { hasFunction(name: string): boolean }).hasFunction("mint")).to.equal(false);
+  });
 });

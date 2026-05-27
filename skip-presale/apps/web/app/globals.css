@@ -4,7 +4,7 @@
 
 :root {
   color-scheme: dark;
-  background: #05080d;
+  background: #050505;
 }
 
 * {
@@ -18,27 +18,37 @@ html {
 body {
   margin: 0;
   background:
-    linear-gradient(rgba(73, 255, 208, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(73, 255, 208, 0.05) 1px, transparent 1px),
-    radial-gradient(circle at 50% 0%, rgba(73, 255, 208, 0.16), transparent 34rem),
-    #05080d;
-  background-size: 42px 42px, 42px 42px, auto, auto;
-  color: #eefdf8;
+    linear-gradient(rgba(255, 106, 0, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 106, 0, 0.04) 1px, transparent 1px),
+    radial-gradient(circle at 18% 0%, rgba(255, 138, 0, 0.18), transparent 34rem),
+    radial-gradient(circle at 82% 16%, rgba(232, 58, 0, 0.16), transparent 30rem),
+    #050505;
+  background-size: 48px 48px, 48px 48px, auto, auto, auto;
+  color: #f5f5f5;
 }
 
 ::selection {
-  background: rgba(73, 255, 208, 0.35);
+  background: rgba(255, 106, 0, 0.42);
 }
 
 .glass {
-  border: 1px solid rgba(141, 255, 225, 0.16);
-  background: linear-gradient(145deg, rgba(12, 20, 29, 0.9), rgba(7, 11, 18, 0.78));
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 106, 0, 0.2);
+  background:
+    linear-gradient(145deg, rgba(22, 13, 7, 0.92), rgba(8, 8, 8, 0.84)),
+    linear-gradient(135deg, rgba(255, 138, 0, 0.08), transparent 42%);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.36), 0 0 34px rgba(255, 106, 0, 0.08);
   backdrop-filter: blur(18px);
 }
 
 .neon-text {
-  text-shadow: 0 0 28px rgba(73, 255, 208, 0.4);
+  text-shadow: 0 0 34px rgba(255, 106, 0, 0.42);
+}
+
+.orange-gradient-text {
+  background: linear-gradient(135deg, #ff8a00, #ff6a00, #e83a00);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .focus-ring {
@@ -46,5 +56,38 @@ body {
 }
 
 .focus-ring:focus-visible {
-  box-shadow: 0 0 0 3px rgba(73, 255, 208, 0.3);
+  box-shadow: 0 0 0 3px rgba(255, 106, 0, 0.36);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .glow-pulse {
+    animation: glow-pulse 3.4s ease-in-out infinite;
+  }
+
+  .motion-streak {
+    animation: streak-shift 8s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes glow-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 22px rgba(255, 106, 0, 0.28), 0 0 64px rgba(255, 106, 0, 0.12);
+  }
+
+  50% {
+    box-shadow: 0 0 34px rgba(255, 138, 0, 0.38), 0 0 90px rgba(255, 106, 0, 0.2);
+  }
+}
+
+@keyframes streak-shift {
+  from {
+    transform: translateX(-2rem);
+    opacity: 0.42;
+  }
+
+  to {
+    transform: translateX(2rem);
+    opacity: 0.78;
+  }
 }

@@ -1,11 +1,13 @@
-const faqs = [
+"use client";
+
+import { useReadContracts } from "wagmi";
+import { abis, contracts, hasConfiguredContracts } from "../config/contracts";
+import { formatBpsToPercent, formatDurationDays } from "../lib/format";
+
+const staticFaqs = [
   ["What is $SKIP?", "$SKIP is an experimental community token focused on the shared frustration of wasted time."],
   ["Is this an investment?", "No. $SKIP should be treated as a high-risk experimental crypto asset, not an investment product."],
   ["Is profit guaranteed?", "No. There are no profit, return, listing, liquidity, market price or future utility guarantees."],
-  [
-    "When can I claim?",
-    "Claims are enabled only after successful finalize and softcap achievement. 50% unlocks immediately, then 50% vests linearly over 90 days."
-  ],
   ["What happens if softcap is not reached?", "Refunds can be enabled after finalize once the contract holds enough USDC to repay all contributions."],
   [
     "Why can 25% be used during presale?",
@@ -17,6 +19,26 @@ const faqs = [
 ];
 
 export function FaqSection() {
+  const configured = hasConfiguredContracts();
+  const { data: vestingConfig } = useReadContracts({
+    contracts: [
+      { address: contracts.skipPresale, abi: abis.skipPresale, functionName: "IMMEDIATE_CLAIM_BPS" },
+      { address: contracts.skipPresale, abi: abis.skipPresale, functionName: "BUYER_VESTING_DURATION" }
+    ],
+    query: { enabled: configured, refetchOnWindowFocus: false, staleTime: Number.POSITIVE_INFINITY }
+  });
+  const immediateClaimBps = vestingConfig?.[0]?.result as bigint | undefined;
+  const vestingDuration = vestingConfig?.[1]?.result as bigint | undefined;
+  const linearClaimBps = immediateClaimBps === undefined ? undefined : 10_000n - immediateClaimBps;
+  const faqs = [
+    ...staticFaqs.slice(0, 3),
+    [
+      "When can I claim?",
+      `Claims are enabled only after successful finalize and softcap achievement. ${formatBpsToPercent(immediateClaimBps)} unlocks immediately, then ${formatBpsToPercent(linearClaimBps)} vests linearly over ${formatDurationDays(vestingDuration)}.`
+    ],
+    ...staticFaqs.slice(3)
+  ];
+
   return (
     <section className="mx-auto max-w-5xl px-4 py-16">
       <h2 className="text-4xl font-black text-white">FAQ</h2>

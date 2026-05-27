@@ -1,14 +1,20 @@
 import { contracts } from "../../config/contracts";
-import { compactAddress, formatSkip } from "../../lib/format";
+import { compactAddress, formatBpsToPercent, formatDurationDays, formatSkip } from "../../lib/format";
 import type { PresaleInfo } from "../../types/admin";
 
 export function AdminVestingPanel({
   presale,
+  buyerVesting,
   totalPurchased,
   totalClaimed,
   team
 }: {
   presale: PresaleInfo;
+  buyerVesting: {
+    start?: bigint;
+    duration?: bigint;
+    immediateClaimBps?: bigint;
+  };
   totalPurchased: bigint;
   totalClaimed: bigint;
   team: {
@@ -21,6 +27,7 @@ export function AdminVestingPanel({
     allocation?: bigint;
   };
 }) {
+  const linearClaimBps = buyerVesting.immediateClaimBps === undefined ? undefined : 10_000n - buyerVesting.immediateClaimBps;
   const cliffEnd = team.startTime && team.cliff ? team.startTime + team.cliff : undefined;
   const vestingEnd = cliffEnd && team.duration ? cliffEnd + team.duration : undefined;
   const remainingLocked = team.allocation !== undefined && team.released !== undefined ? team.allocation - team.released : undefined;
@@ -30,9 +37,10 @@ export function AdminVestingPanel({
       <div className="rounded-lg border border-line bg-black/25 p-5">
         <h2 className="text-xl font-bold text-white">Buyer Vesting</h2>
         <div className="mt-5 grid gap-3 md:grid-cols-2">
-          <Metric label="vestingStart" value={formatDate(presale.startTime === 0n ? undefined : presale.startTime)} />
-          <Metric label="Duration" value="90 days" />
-          <Metric label="Immediate claim" value="50%" />
+          <Metric label="vestingStart" value={formatDate(buyerVesting.start)} />
+          <Metric label="Duration" value={formatDurationDays(buyerVesting.duration)} />
+          <Metric label="Immediate claim" value={formatBpsToPercent(buyerVesting.immediateClaimBps)} />
+          <Metric label="Linear claim" value={formatBpsToPercent(linearClaimBps)} />
           <Metric label="Total purchased" value={`${formatSkip(totalPurchased)} SKIP`} />
           <Metric label="Total claimed (event estimate)" value={`${formatSkip(totalClaimed)} SKIP`} />
           <Metric label="Total unclaimed" value={`${formatSkip(totalPurchased > totalClaimed ? totalPurchased - totalClaimed : 0n)} SKIP`} />
